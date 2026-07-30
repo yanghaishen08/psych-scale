@@ -1,0 +1,23 @@
+name = "psych-scale-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Cloudflare D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "psych-scale-db"
+database_id = "88364731-4bdc-485e-b8b0-aaada5e73a40"
+
+# 环境变量（敏感信息请使用 wrangler secret put 设置，不要写在此文件中）
+[vars]
+NOTION_SCALES_DB_ID = "3adff79f-b737-81da-9a85-d1d70266dbb5"
+NOTION_SECTIONS_DB_ID = "3adff79f-b737-816b-8649-dc964bf1c27c"
+NOTION_QUESTIONS_DB_ID = "3adff79f-b737-8104-ad03-d98bf2c29cac"
+NOTION_OPTIONS_DB_ID = "3adff79f-b737-8100-b45c-f662873cda2b"
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_MODEL = "deepseek-chat"
+CORS_ORIGIN = "*"
+
+# 敏感信息请通过以下命令设置（不要提交到代码仓库）:
+#   npx wrangler secret put NOTION_API_KEY
+#   npx wrangler secret put DEEPSEEK_API_KEY

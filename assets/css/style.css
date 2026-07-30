@@ -1,0 +1,1041 @@
+/* ==================== CSS 变量定义 ==================== */
+:root {
+    --primary-color: #4a90a4;
+    --secondary-color: #6b8e9f;
+    --accent-color: #e07a5f;
+    --bg-light: #f8f9fa;
+    --text-dark: #2d3748;
+
+    /* 报告页扩展变量 */
+    --primary: #4a90a4;
+    --primary-light: #e8f4f8;
+    --secondary: #6b8e9f;
+    --accent: #e07a5f;
+    --bg-card: #ffffff;
+    --text-primary: #2d3748;
+    --text-secondary: #718096;
+    --border: #e2e8f0;
+}
+
+/* ==================== 基础样式 ==================== */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+    min-height: 100vh;
+    color: var(--text-dark);
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1 0 auto;
+}
+
+a {
+    transition: color 0.2s;
+}
+
+/* ==================== 导航栏 ==================== */
+.navbar {
+    background: white !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    color: var(--primary-color) !important;
+    font-size: 1.25rem;
+}
+
+.navbar-brand i {
+    color: var(--accent-color);
+}
+
+.nav-link {
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.nav-link:hover {
+    color: var(--primary-color) !important;
+}
+
+.nav-link.active {
+    color: var(--primary-color) !important;
+    font-weight: 600;
+}
+
+/* ==================== 卡片组件 ==================== */
+.card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+    background: white;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* ==================== 按钮组件 ==================== */
+.btn-primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border: none;
+    border-radius: 10px;
+    padding: 10px 24px;
+    font-weight: 600;
+    transition: all 0.25s;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(74, 144, 164, 0.3);
+}
+
+.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-accent {
+    background: linear-gradient(135deg, var(--accent-color), #d4664a);
+    border: none;
+    color: white;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.25s;
+}
+
+.btn-accent:hover {
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(224, 122, 95, 0.3);
+}
+
+.btn-outline-primary {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.btn-outline-primary:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* ==================== 表单组件 ==================== */
+.form-control,
+.form-select {
+    border-radius: 10px;
+    border: 2px solid #e2e8f0;
+    padding: 12px 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 164, 0.15);
+}
+
+/* ==================== 题目卡片 ==================== */
+.question-card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    border-left: 4px solid var(--primary-color);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.2s;
+}
+
+.question-card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.question-card.error {
+    border-left-color: var(--accent-color);
+    background: #fff5f3;
+}
+
+.question-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.question-text {
+    font-weight: 600;
+    color: var(--text-dark);
+    line-height: 1.6;
+}
+
+.required-mark {
+    color: var(--accent-color);
+    margin-left: 2px;
+}
+
+/* ==================== 选项项 ==================== */
+.option-item {
+    padding: 14px 18px;
+    margin: 8px 0;
+    border-radius: 12px;
+    background: var(--bg-light);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+}
+
+.option-item:hover {
+    background: #e8f4f8;
+    border-color: var(--primary-color);
+}
+
+.option-item.selected {
+    background: #e8f4f8;
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(74, 144, 164, 0.15);
+}
+
+.option-item .form-check {
+    width: 100%;
+    margin: 0;
+}
+
+.option-item .form-check-input {
+    cursor: pointer;
+    margin-top: 0.25em;
+}
+
+.option-item .form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.option-item .form-check-label {
+    cursor: pointer;
+    width: 100%;
+    line-height: 1.6;
+    color: var(--text-dark);
+}
+
+/* ==================== 引导内容区块 ==================== */
+.section-card {
+    background: white;
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.section-card h5 {
+    color: var(--primary-color);
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.section-card .section-content {
+    color: var(--text-secondary);
+    line-height: 1.8;
+}
+
+.section-card .section-content p {
+    margin-bottom: 0.8em;
+}
+
+.section-card .section-content p:last-child {
+    margin-bottom: 0;
+}
+
+.section-card img {
+    max-width: 100%;
+    border-radius: 12px;
+    margin-top: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* ==================== 徽章 ==================== */
+.badge-category {
+    background: var(--bg-light);
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+}
+
+.badge-ai {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+}
+
+.badge-free {
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.badge-price {
+    background: linear-gradient(135deg, var(--accent-color), #d4664a);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* ==================== 预览提示 ==================== */
+.preview-banner {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+}
+
+/* ==================== 加载状态 ==================== */
+.loading-container {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.loading-container .spinner-border {
+    color: var(--primary-color);
+    width: 3rem;
+    height: 3rem;
+}
+
+.loading-container p {
+    color: var(--text-secondary);
+    margin-top: 16px;
+    font-size: 0.95rem;
+}
+
+/* ==================== 空状态 ==================== */
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.empty-state i {
+    font-size: 4rem;
+    color: #cbd5e0;
+}
+
+.empty-state p {
+    color: var(--text-secondary);
+    margin-top: 16px;
+    font-size: 1.1rem;
+}
+
+/* ==================== 错误状态 ==================== */
+.error-state {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.error-state i {
+    font-size: 4rem;
+    color: var(--accent-color);
+}
+
+.error-state h4 {
+    color: var(--text-dark);
+    margin-top: 16px;
+}
+
+.error-state p {
+    color: var(--text-secondary);
+    margin-top: 8px;
+}
+
+.error-state .btn {
+    margin-top: 20px;
+}
+
+/* ==================== 提交加载动画 ==================== */
+.submit-loading-card {
+    border-left: 4px solid var(--primary-color);
+    text-align: center;
+}
+
+.submit-loading-card .spinner-border {
+    color: var(--primary-color);
+    width: 3rem;
+    height: 3rem;
+}
+
+.submit-loading-card h5 {
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+.submit-loading-card .progress-bar {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+}
+
+/* ==================== Hero 区域 ==================== */
+.hero-section {
+    text-align: center;
+    padding: 60px 20px 40px;
+}
+
+.hero-section h1 {
+    font-weight: 800;
+    color: var(--primary-color);
+    letter-spacing: -0.02em;
+}
+
+.hero-section .lead {
+    color: var(--text-secondary);
+    font-size: 1.15rem;
+}
+
+.hero-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-light), #e8f0f4);
+    margin-bottom: 20px;
+    font-size: 2.5rem;
+    color: var(--primary-color);
+}
+
+/* ==================== 量表卡片 ==================== */
+.scale-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.scale-card .card-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.scale-card .card-title {
+    color: var(--text-dark);
+    font-weight: 700;
+}
+
+.scale-card .card-text {
+    flex: 1;
+    color: var(--text-secondary);
+}
+
+.scale-card .card-footer-custom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+}
+
+/* ==================== 页脚 ==================== */
+.footer {
+    background: white;
+    padding: 24px 0;
+    margin-top: 60px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.footer small {
+    font-size: 0.85rem;
+}
+
+.footer .footer-links {
+    margin-bottom: 8px;
+}
+
+.footer .footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    margin: 0 12px;
+    transition: color 0.2s;
+}
+
+.footer .footer-links a:hover {
+    color: var(--primary-color);
+}
+
+/* ==================== 报告页样式 ==================== */
+
+/* 报告头部卡片 */
+.report-header-card {
+    background: var(--bg-card);
+    border-radius: 20px;
+    padding: 40px 32px;
+    text-align: center;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(74, 144, 164, 0.08);
+}
+
+.report-header-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+    border-radius: 20px 20px 0 0;
+}
+
+.report-header-icon {
+    margin-bottom: 16px;
+}
+
+.report-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.report-meta {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* 报告主体容器 */
+.report-main-card {
+    background: var(--bg-card);
+    border-radius: 20px;
+    padding: 36px 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 24px rgba(74, 144, 164, 0.08);
+}
+
+/* AI 标签 */
+.report-ai-badge {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.ai-badge-inner {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, var(--primary-light), #e8f0f4);
+    border: 1px solid rgba(74, 144, 164, 0.2);
+    border-radius: 50px;
+    padding: 10px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.badge-ai-source {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 10px;
+    font-weight: 500;
+}
+
+/* 分割线 */
+.report-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.divider-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.3;
+    flex-shrink: 0;
+}
+
+.divider-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(74, 144, 164, 0.2), transparent);
+}
+
+/* ==================== Markdown 报告内容样式 ==================== */
+.report-content.markdown-body {
+    color: var(--text-primary);
+    line-height: 1.95;
+    font-size: 0.96rem;
+}
+
+/* 标题层级系统 */
+.report-content.markdown-body h1 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 2.2em 0 0.9em 0;
+    padding-bottom: 0.45em;
+    border-bottom: 2.5px solid var(--primary-light);
+    letter-spacing: -0.02em;
+}
+
+.report-content.markdown-body h1:first-child {
+    margin-top: 0.3em;
+}
+
+.report-content.markdown-body h2 {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 2em 0 0.75em 0;
+    padding-left: 16px;
+    border-left: 5px solid var(--primary);
+    position: relative;
+}
+
+.report-content.markdown-body h2::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 5px;
+    height: 70%;
+    background: linear-gradient(180deg, var(--primary), var(--secondary));
+    border-radius: 3px;
+}
+
+.report-content.markdown-body h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 1.6em 0 0.6em 0;
+    padding-bottom: 0.3em;
+    border-bottom: 1px dashed rgba(74, 144, 164, 0.25);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.report-content.markdown-body h3::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    flex-shrink: 0;
+}
+
+.report-content.markdown-body h4 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--secondary);
+    margin: 1.4em 0 0.5em 0;
+}
+
+.report-content.markdown-body h5,
+.report-content.markdown-body h6 {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 1.2em 0 0.4em 0;
+}
+
+/* 段落 */
+.report-content.markdown-body p {
+    margin-bottom: 1.1em;
+    text-align: justify;
+    word-break: break-word;
+}
+
+.report-content.markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+/* 加粗文本 */
+.report-content.markdown-body strong {
+    color: var(--primary);
+    font-weight: 700;
+    background: linear-gradient(180deg, transparent 60%, rgba(74, 144, 164, 0.12) 60%);
+    padding: 0 2px;
+}
+
+/* 列表 */
+.report-content.markdown-body ul,
+.report-content.markdown-body ol {
+    padding-left: 1.8em;
+    margin-bottom: 1.2em;
+}
+
+.report-content.markdown-body li {
+    margin-bottom: 0.6em;
+    line-height: 1.85;
+}
+
+.report-content.markdown-body ul li::marker {
+    color: var(--primary);
+    font-size: 1.1em;
+}
+
+.report-content.markdown-body ol li::marker {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.report-content.markdown-body li > p {
+    margin-bottom: 0.3em;
+}
+
+/* 引用块 */
+.report-content.markdown-body blockquote {
+    background: linear-gradient(135deg, #f0f7fa, #e8f4f8);
+    border-left: 4px solid var(--primary);
+    border-radius: 0 14px 14px 0;
+    padding: 18px 24px;
+    margin: 1.4em 0;
+    color: var(--text-primary);
+    font-style: normal;
+    box-shadow: 0 2px 8px rgba(74, 144, 164, 0.06);
+}
+
+.report-content.markdown-body blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+.report-content.markdown-body blockquote strong {
+    background: none;
+    color: var(--primary);
+}
+
+/* 水平分割线 */
+.report-content.markdown-body hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(74, 144, 164, 0.25), transparent);
+    margin: 2.2em 0;
+    position: relative;
+}
+
+.report-content.markdown-body hr::after {
+    content: '\25C6';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--primary);
+    background: var(--bg-card);
+    padding: 0 12px;
+    font-size: 0.7rem;
+    opacity: 0.5;
+}
+
+/* 表格 */
+.report-content.markdown-body table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 1.4em 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    font-size: 0.92rem;
+}
+
+.report-content.markdown-body thead {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+}
+
+.report-content.markdown-body thead th {
+    padding: 14px 16px;
+    font-weight: 600;
+    text-align: left;
+    border: none;
+}
+
+.report-content.markdown-body tbody tr:nth-child(even) {
+    background: #f8fbfc;
+}
+
+.report-content.markdown-body tbody tr:hover {
+    background: #edf5f8;
+}
+
+.report-content.markdown-body tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.report-content.markdown-body tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 代码 */
+.report-content.markdown-body code {
+    background: #f0f4f8;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.88em;
+    color: var(--accent);
+    font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+}
+
+.report-content.markdown-body pre {
+    background: #f5f7fa;
+    border-radius: 12px;
+    padding: 20px;
+    overflow-x: auto;
+    margin: 1.2em 0;
+    border: 1px solid var(--border);
+}
+
+.report-content.markdown-body pre code {
+    background: none;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+/* 链接 */
+.report-content.markdown-body a {
+    color: var(--primary);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--primary);
+    transition: all 0.2s;
+}
+
+.report-content.markdown-body a:hover {
+    color: var(--accent);
+    border-bottom-style: solid;
+}
+
+/* 图片 */
+.report-content.markdown-body img {
+    max-width: 100%;
+    border-radius: 12px;
+    margin: 1em 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* ==================== 报告操作按钮 ==================== */
+.report-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 40px;
+}
+
+.btn-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 24px;
+    border-radius: 14px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    transition: all 0.25s;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-action-print {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    box-shadow: 0 4px 16px rgba(74, 144, 164, 0.3);
+}
+
+.btn-action-print:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(74, 144, 164, 0.4);
+    color: white;
+}
+
+.btn-action-home {
+    background: var(--bg-card);
+    color: var(--primary);
+    border: 2px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.btn-action-home:hover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+    color: var(--primary);
+    transform: translateY(-2px);
+}
+
+/* ==================== 404 页面 ==================== */
+.not-found-container {
+    text-align: center;
+    padding: 100px 20px;
+}
+
+.not-found-container .error-code {
+    font-size: 8rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    line-height: 1;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.not-found-container h2 {
+    color: var(--text-dark);
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
+.not-found-container p {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    font-size: 1.1rem;
+}
+
+/* ==================== 返回链接 ==================== */
+.back-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.back-link:hover {
+    color: var(--primary-color);
+}
+
+/* ==================== 打印样式 ==================== */
+@media print {
+    .navbar,
+    .footer,
+    .report-actions,
+    .back-link {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+    }
+
+    .report-header-card,
+    .report-main-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd;
+    }
+
+    .report-header-card::before {
+        display: none;
+    }
+
+    .report-content.markdown-body strong {
+        background: none;
+    }
+
+    .report-content.markdown-body h2::before {
+        display: none;
+    }
+}
+
+/* ==================== 响应式适配 ==================== */
+@media (max-width: 768px) {
+    .hero-section {
+        padding: 40px 20px 30px;
+    }
+
+    .hero-section h1 {
+        font-size: 2rem;
+    }
+
+    .hero-section .lead {
+        font-size: 1rem;
+    }
+
+    .question-card {
+        padding: 18px 16px;
+    }
+
+    .option-item {
+        padding: 12px 14px;
+    }
+}
+
+@media (max-width: 576px) {
+    .report-header-card {
+        padding: 28px 20px;
+    }
+
+    .report-main-card {
+        padding: 24px 20px;
+    }
+
+    .report-title {
+        font-size: 1.3rem;
+    }
+
+    .report-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .report-content.markdown-body h1 {
+        font-size: 1.4rem;
+    }
+
+    .report-content.markdown-body h2 {
+        font-size: 1.2rem;
+    }
+
+    .report-content.markdown-body h3 {
+        font-size: 1.05rem;
+    }
+
+    .section-card {
+        padding: 20px 16px;
+    }
+
+    .not-found-container .error-code {
+        font-size: 5rem;
+    }
+}
