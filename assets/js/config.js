@@ -3,7 +3,7 @@
  */
 const CONFIG = {
     // API 基础地址（部署后替换为实际地址）
-    API_BASE: 'https://psych-scale-api.1006204828.workers.dev',
+  API_BASE: 'https://www.moonsheep.cloud',
 
     // 页面路径
     PAGES: {
