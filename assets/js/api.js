@@ -38,7 +38,19 @@ const API = {
             const response = await this.fetchWithTimeout(url, options, timeout);
 
             if (!response.ok) {
-                throw new Error(`请求失败 (${response.status})`);
+                // 尝试读取服务器返回的具体错误信息
+                let errorMsg = `请求失败 (${response.status})`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData.error) {
+                        errorMsg = errorData.error;
+                    } else if (errorData.message) {
+                        errorMsg = errorData.message;
+                    }
+                } catch (e) {
+                    // 响应体不是 JSON，使用默认错误信息
+                }
+                throw new Error(errorMsg);
             }
 
             const data = await response.json();

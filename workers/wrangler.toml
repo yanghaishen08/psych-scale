@@ -2,6 +2,11 @@ name = "psych-scale-api"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
+# 自定义域名路由（国内可直连，绕过被墙的 workers.dev）
+routes = [
+  { pattern = "www.moonsheep.cloud", custom_domain = true }
+]
+
 # Cloudflare D1 数据库绑定
 [[d1_databases]]
 binding = "DB"

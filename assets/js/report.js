@@ -159,6 +159,133 @@
     }
 
     /**
+     * 检测代码块内容是否为 Mermaid 图表语法
+     * 通过关键词匹配，兼容 AI 未使用 ```mermaid 标记的情况
+     * @param {string} text - 代码块文本内容
+     * @returns {boolean}
+     */
+    function isMermaidCode(text) {
+        const trimmed = text.trim();
+        // 匹配 Mermaid 所有图表类型关键字，以及 %%{init 配置指令
+        return /^(pie\b|radar\b|radar-beta\b|radarLR\b|graph\b|flowchart\b|sequenceDiagram\b|gantt\b|classDiagram\b|stateDiagram\b|erDiagram\b|journey\b|gitGraph\b|mindmap\b|timeline\b|quadrantChart\b|xychart\b|sankey\b|block\b|architecture\b|%%\{init)/im.test(trimmed);
+    }
+
+    /**
+     * 预处理 Mermaid 代码，修正 AI 生成的常见语法问题
+     * @param {string} code - 原始 Mermaid 代码
+     * @returns {string} 修正后的代码
+     */
+    function preprocessMermaidCode(code) {
+        // radarLR / radar → radar-beta（Mermaid v11.6+ 语法）
+        if (/^radar(LR|TB|RL|BT)?\b/im.test(code)) {
+            return convertRadarToBeta(code);
+        }
+        return code;
+    }
+
+    /**
+     * 将 radarLR 旧语法转换为 radar-beta 标准语法
+     * radarLR 不被 Mermaid 支持，需转为 radar-beta + curve 写法
+     */
+    function convertRadarToBeta(code) {
+        const lines = code.split('\n');
+        let result = 'radar-beta\n';
+        let axisLabels = [];
+        let values = [];
+        let seriesName = '得分';
+        let title = '';
+
+        for (let line of lines) {
+            const trimmed = line.trim();
+            if (/^radar/i.test(trimmed)) continue;
+            if (/^accTitle/i.test(trimmed)) continue;
+            if (/^accDescr/i.test(trimmed)) continue;
+
+            if (trimmed.startsWith('title ')) {
+                title = trimmed.substring(6).trim();
+            } else if (trimmed.startsWith('axis ')) {
+                const labels = trimmed.substring(5).split(',').map(s => s.trim()).filter(Boolean);
+                axisLabels = axisLabels.concat(labels);
+            } else if (trimmed.startsWith('series ')) {
+                seriesName = trimmed.substring(7).trim();
+            } else if (trimmed.startsWith('values ')) {
+                values = trimmed.substring(7).split(',').map(s => s.trim()).filter(Boolean);
+            }
+        }
+
+        if (title) result += `    title ${title}\n`;
+        if (axisLabels.length > 0) {
+            result += `    axis ${axisLabels.join(', ')}\n`;
+        }
+        if (values.length > 0) {
+            result += `    curve ${seriesName}{${values.join(', ')}}\n`;
+        }
+        result += '    max 100\n    min 0\n';
+
+        return result;
+    }
+
+    /**
+     * 渲染 Mermaid 图表
+     * 扫描所有代码块（不仅限于 language-mermaid），检测并渲染 Mermaid 图表
+     */
+    async function renderMermaidDiagrams() {
+        // 扫描所有 pre > code 块，检测 Mermaid 语法
+        const allCodeBlocks = reportContainer.querySelectorAll('pre code');
+        const mermaidBlocks = [];
+
+        allCodeBlocks.forEach((codeBlock) => {
+            const lang = (codeBlock.className || '').replace('language-', '').trim();
+            const text = codeBlock.textContent.trim();
+
+            // 通过 language class 或内容关键词检测
+            if (lang === 'mermaid' || isMermaidCode(text)) {
+                mermaidBlocks.push(codeBlock);
+            }
+        });
+
+        if (mermaidBlocks.length === 0) return;
+
+        // 将 mermaid 代码块转换为 mermaid div
+        mermaidBlocks.forEach((codeBlock) => {
+            const pre = codeBlock.parentElement;
+            const rawCode = codeBlock.textContent;
+            const processedCode = preprocessMermaidCode(rawCode);
+
+            const mermaidDiv = document.createElement('div');
+            mermaidDiv.className = 'mermaid';
+            mermaidDiv.textContent = processedCode;
+
+            if (pre && pre.parentElement) {
+                pre.parentElement.replaceChild(mermaidDiv, pre);
+            }
+        });
+
+        // Mermaid 库未加载时降级为代码显示
+        if (typeof mermaid === 'undefined') {
+            console.warn('Mermaid 库未加载，图表将以代码形式显示');
+            return;
+        }
+
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+
+        // 逐个渲染，单个图表失败不影响其他图表
+        const mermaidDivs = reportContainer.querySelectorAll('.mermaid');
+        for (const div of mermaidDivs) {
+            try {
+                await mermaid.run({ nodes: [div] });
+            } catch (err) {
+                console.warn('Mermaid 图表渲染失败:', err);
+                div.classList.add('mermaid-error');
+            }
+        }
+    }
+
+    /**
      * 渲染完整报告
      * @param {object} report - 报告数据
      */
@@ -175,6 +302,9 @@
         loadingState.classList.add('d-none');
         errorState.classList.add('d-none');
         reportContainer.classList.remove('d-none');
+
+        // 渲染 Mermaid 图表（异步，不阻塞内容显示）
+        renderMermaidDiagrams();
     }
 
     /**
