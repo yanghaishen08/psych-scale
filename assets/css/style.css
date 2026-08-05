@@ -890,33 +890,24 @@ a {
 
 /* --- 辐射仪表盘 --- */
 .radial-body { display: block; text-align: center; }
-.radial-svg { width: 100%; max-width: 400px; height: auto; }
+.radial-svg { width: 100%; max-width: 320px; height: auto; }
 
 .node-pct {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     fill: #fff;
 }
 .node-label {
-    font-size: 9px;
-    fill: rgba(255, 255, 255, 0.9);
-}
-.node-detail {
     font-size: 10px;
-    fill: #5a6a75;
-    font-weight: 500;
-}
-.node-detail-val {
-    font-size: 12px;
-    font-weight: 700;
+    fill: rgba(255, 255, 255, 0.92);
 }
 .center-score {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 800;
     fill: #2d3748;
 }
 .center-label {
-    font-size: 11px;
+    font-size: 10px;
     fill: #8a9ba8;
 }
 

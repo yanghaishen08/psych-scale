@@ -162,18 +162,10 @@
 
     /** 按分数返回颜色 */
     function scoreColor(v) {
-        if (v >= 80) return '#2EC4B6';  // 青绿 - 优势
-        if (v >= 60) return '#3498DB';  // 蓝 - 待开发
-        if (v >= 40) return '#F5A623';  // 橙 - 脆弱
-        return '#F25F5C';               // 红 - 预警
-    }
-
-    /** 按分数返回评级标签 */
-    function scoreLabel(v) {
-        if (v >= 80) return '优势区';
-        if (v >= 60) return '待开发区';
-        if (v >= 40) return '脆弱区';
-        return '预警区';
+        if (v >= 80) return '#2EC4B6';
+        if (v >= 60) return '#3498DB';
+        if (v >= 40) return '#F5A623';
+        return '#F25F5C';
     }
 
     /** 节点配色（辐射图用） */
@@ -208,7 +200,7 @@
     }
 
     /**
-     * 渲染辐射节点仪表盘（仿图1风格：中心圆 + 彩色节点辐射布局）
+     * 渲染辐射节点仪表盘（节点内显示完整信息，无外侧标签）
      */
     function renderRadialDashboard(pieData, container) {
         const { title, data } = pieData;
@@ -217,21 +209,18 @@
         const total = data.reduce((s, d) => s + d.value, 0);
         const n = data.length;
 
-        // 判断是否为评分区间型（如 优势区/待开发区/脆弱区/预警区）
+        // 判断是否为评分区间型
         const isZoneChart = data.some(d => /优势区|待开发区|脆弱区|预警区/.test(d.label));
 
-        // SVG 尺寸
-        const cx = 200, cy = 200;
-        const centerR = 52;
-        const nodeR = 34;
-        const orbitR = 140;
+        const cx = 160, cy = 160;
+        const centerR = 44;
+        const nodeR = 30;
+        const orbitR = 105;
 
-        // 计算节点位置
         const angle = (i) => (Math.PI * 2 * i) / n - Math.PI / 2;
         const nx = (i) => cx + orbitR * Math.cos(angle(i));
         const ny = (i) => cy + orbitR * Math.sin(angle(i));
 
-        // 连接线（从中心到节点，带锥度）
         let connectors = '';
         let nodes = '';
         let nodeTexts = '';
@@ -247,48 +236,40 @@
             const dx = x - cx, dy = y - cy;
             const dist = Math.sqrt(dx * dx + dy * dy);
             const ux = dx / dist, uy = dy / dist;
-            // 垂直方向
             const vx = -uy, vy = ux;
-            const startW = 4, endW = nodeR * 0.5;
+            const startW = 3, endW = nodeR * 0.45;
             const sx1 = cx + vx * startW, sy1 = cy + vy * startW;
             const sx2 = cx - vx * startW, sy2 = cy - vy * startW;
             const ex1 = x + vx * endW, ey1 = y + vy * endW;
             const ex2 = x - vx * endW, ey2 = y - vy * endW;
 
-            connectors += `<path d="M ${sx1} ${sy1} L ${ex1} ${ey1} L ${ex2} ${ey2} L ${sx2} ${sy2} Z" fill="${color}" opacity="0.18"/>`;
+            connectors += `<path d="M ${sx1} ${sy1} L ${ex1} ${ey1} L ${ex2} ${ey2} L ${sx2} ${sy2} Z" fill="${color}" opacity="0.15"/>`;
 
             // 节点圆
-            nodes += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${color}" opacity="0.9" filter="url(#shadow)"/>`;
-            nodes += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="none" stroke="#fff" stroke-width="2.5"/>`;
+            nodes += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="${color}" filter="url(#shadow)"/>`;
+            nodes += `<circle cx="${x}" cy="${y}" r="${nodeR}" fill="none" stroke="#fff" stroke-width="2"/>`;
 
-            // 节点内文字：百分比
-            nodeTexts += `<text x="${x}" y="${y - 2}" text-anchor="middle" class="node-pct">${pct}%</text>`;
-            // 节点内文字：标签简称
+            // 节点内文字：百分比 + 两字简称
             let shortLabel = item.label;
             if (isZoneChart) {
                 shortLabel = item.label.replace(/[（(].*[）)].*/, '').replace(/\[.*\]/, '').trim();
-            } else if (shortLabel.length > 5) {
-                shortLabel = shortLabel.substring(0, 4) + '..';
+                if (shortLabel.length > 3) shortLabel = shortLabel.substring(0, 3);
+            } else {
+                // 取维度名前两字
+                shortLabel = item.label.replace(/[（(×x].*$/,'').trim().substring(0, 2);
             }
-            nodeTexts += `<text x="${x}" y="${y + 13}" text-anchor="middle" class="node-label">${shortLabel}</text>`;
-
-            // 节点外侧标签（详细）
-            const lx = cx + (orbitR + 48) * Math.cos(angle(i));
-            const ly = cy + (orbitR + 48) * Math.sin(angle(i));
-            const anchor = Math.abs(lx - cx) < 15 ? 'middle' : (lx > cx ? 'start' : 'end');
-            nodeTexts += `<text x="${lx}" y="${ly}" text-anchor="${anchor}" class="node-detail">${item.label}</text>`;
-            nodeTexts += `<text x="${lx}" y="${ly + 14}" text-anchor="${anchor}" class="node-detail-val" fill="${color}">${item.value}</text>`;
+            nodeTexts += `<text x="${x}" y="${y - 4}" text-anchor="middle" class="node-pct">${pct}%</text>`;
+            nodeTexts += `<text x="${x}" y="${y + 10}" text-anchor="middle" class="node-label">${shortLabel}</text>`;
         });
 
-        // 中心圆
         const centerScore = isZoneChart ? '' : Math.round(total / n);
-        const centerTitle = isZoneChart ? '评估' : (title || '综合指数').substring(0, 6);
+        const centerTitle = isZoneChart ? '评估' : '综合指数';
 
         container.innerHTML = `
             <div class="custom-chart-card radial-card">
                 <h3 class="custom-chart-title">${escapeHtml(title || '综合仪表盘')}</h3>
                 <div class="custom-chart-body radial-body">
-                    <svg viewBox="0 0 400 400" class="radial-svg" preserveAspectRatio="xMidYMid meet">
+                    <svg viewBox="0 0 320 320" class="radial-svg" preserveAspectRatio="xMidYMid meet">
                         <defs>
                             <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
                                 <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
@@ -296,11 +277,10 @@
                         </defs>
                         ${connectors}
                         ${nodes}
-                        <!-- 中心圆 -->
-                        <circle cx="${cx}" cy="${cy}" r="${centerR + 6}" fill="#fff" filter="url(#shadow)"/>
+                        <circle cx="${cx}" cy="${cy}" r="${centerR + 5}" fill="#fff" filter="url(#shadow)"/>
                         <circle cx="${cx}" cy="${cy}" r="${centerR}" fill="none" stroke="#e8eef2" stroke-width="2"/>
                         ${centerScore ? `<text x="${cx}" y="${cy - 3}" text-anchor="middle" class="center-score">${centerScore}</text>` : ''}
-                        <text x="${cx}" y="${cy + 15}" text-anchor="middle" class="center-label">${centerTitle}</text>
+                        <text x="${cx}" y="${cy + 13}" text-anchor="middle" class="center-label">${centerTitle}</text>
                         ${nodeTexts}
                     </svg>
                 </div>
@@ -308,39 +288,68 @@
     }
 
     /**
-     * 解析雷达图数据
+     * 从报告的"各维度得分量表"表格中提取维度和分数
+     * 这是最可靠的数据源，不依赖 AI 生成的图表格式
      */
-    function parseRadarData(code) {
-        const lines = code.split('\n');
-        let axes = [], values = [], seriesName = '得分', title = '';
+    function extractRadarDataFromTable() {
+        // 查找所有表格
+        const tables = reportContainer.querySelectorAll('.markdown-body table');
+        for (const table of tables) {
+            const headers = table.querySelectorAll('thead th');
+            if (headers.length < 2) continue;
 
-        for (let line of lines) {
-            const t = line.trim();
-            if (/^(radar|accTitle|accDescr)/i.test(t)) continue;
-            if (t.startsWith('title ')) { title = t.substring(6).trim(); continue; }
-            if (t.startsWith('axis ')) {
-                const rest = t.substring(5);
-                const idLabels = rest.match(/(\w+)\["([^"]+)"\]/g);
-                if (idLabels) {
-                    idLabels.forEach(m => { const mm = m.match(/(\w+)\["([^"]+)"\]/); if (mm) axes.push(mm[2]); });
-                } else {
-                    axes = axes.concat(rest.split(',').map(s => s.trim()).filter(Boolean));
+            // 判断是否为维度得分表：包含"维度""百分制""得分"等关键词
+            const headerText = Array.from(headers).map(h => h.textContent.trim()).join('|');
+            if (!/(维度|名称).*(百分制|得分|分数)/.test(headerText) && !/(得分|分数).*(维度|名称)/.test(headerText)) continue;
+
+            const rows = table.querySelectorAll('tbody tr');
+            const axes = [];
+            const values = [];
+
+            // 找到维度名列和分数列的索引
+            let dimCol = -1, scoreCol = -1;
+            headers.forEach((h, i) => {
+                const t = h.textContent.trim();
+                if (/维度|名称|指标/.test(t) && dimCol === -1) dimCol = i;
+                if (/百分制|得分|分数/.test(t) && scoreCol === -1) scoreCol = i;
+            });
+
+            if (dimCol === -1 || scoreCol === -1) continue;
+
+            for (const row of rows) {
+                const cells = row.querySelectorAll('td');
+                if (cells.length <= Math.max(dimCol, scoreCol)) continue;
+                const dim = cells[dimCol].textContent.trim();
+                const scoreText = cells[scoreCol].textContent.replace(/[^\d.]/g, '');
+                const score = parseFloat(scoreText);
+                if (dim && !isNaN(score)) {
+                    axes.push(dim);
+                    values.push(score);
                 }
-                continue;
             }
-            if (t.startsWith('curve ')) {
-                const m = t.match(/curve\s+\w+(?:\["([^"]+)"\])?\s*\{([^}]+)\}/);
-                if (m) { if (m[1]) seriesName = m[1]; values = m[2].split(',').map(s => parseFloat(s.trim())); }
-                continue;
+
+            if (axes.length >= 3) {
+                return { axes, values, seriesName: '得分', title: '维度雷达图' };
             }
-            if (t.startsWith('series ')) { seriesName = t.substring(7).trim(); continue; }
-            if (t.startsWith('values ')) { values = t.substring(7).split(',').map(s => parseFloat(s.trim())); continue; }
         }
-        return { title, axes, values, seriesName };
+        return null;
     }
 
     /**
-     * 渲染经典雷达图（仿图2风格：多边形网格 + 半透明填充 + 数据点标记）
+     * 找到"雷达图"章节的容器元素
+     */
+    function findRadarSection() {
+        const headings = reportContainer.querySelectorAll('.markdown-body h2, .markdown-body h3');
+        for (const h of headings) {
+            if (/雷达图/.test(h.textContent.trim())) {
+                return h;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 渲染经典雷达图（仿图2风格）
      */
     function renderClassicRadarChart(radarData, container) {
         const { title, axes, values, seriesName } = radarData;
@@ -350,7 +359,7 @@
         }
 
         const n = Math.min(axes.length, values.length);
-        const cx = 200, cy = 200, maxR = 135;
+        const cx = 175, cy = 175, maxR = 115;
         const maxVal = 100, minVal = 0;
         const levels = 5;
 
@@ -359,17 +368,16 @@
         const px = (i, r) => cx + r * Math.cos(angle(i));
         const py = (i, r) => cy + r * Math.sin(angle(i));
 
-        // 网格层
+        // 网格
         let grid = '';
         for (let lv = 1; lv <= levels; lv++) {
             const r = (maxR * lv) / levels;
             const pts = Array.from({ length: n }, (_, i) => `${px(i, r).toFixed(1)},${py(i, r).toFixed(1)}`).join(' ');
-            const fill = lv === levels ? 'rgba(0,0,0,0.02)' : 'none';
             const stroke = lv === levels ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.07)';
-            grid += `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="1"/>`;
+            grid += `<polygon points="${pts}" fill="none" stroke="${stroke}" stroke-width="1"/>`;
         }
 
-        // 刻度标签
+        // 刻度
         let scaleLabels = '';
         for (let lv = 1; lv <= levels; lv++) {
             const r = (maxR * lv) / levels;
@@ -383,34 +391,33 @@
             axisLines += `<line x1="${cx}" y1="${cy}" x2="${px(i, maxR).toFixed(1)}" y2="${py(i, maxR).toFixed(1)}" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>`;
         }
 
-        // 轴标签
+        // 轴标签（放在节点外侧，动态调整位置避免重叠）
         let axisLabels = '';
         for (let i = 0; i < n; i++) {
-            const lx = px(i, maxR + 24), ly = py(i, maxR + 24);
+            const lx = px(i, maxR + 22), ly = py(i, maxR + 22);
             const anchor = Math.abs(lx - cx) < 12 ? 'middle' : (lx > cx ? 'start' : 'end');
-            axisLabels += `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" class="radar-axis-label">${axes[i]}</text>`;
-            axisLabels += `<text x="${lx.toFixed(1)}" y="${(ly + 15).toFixed(1)}" text-anchor="${anchor}" class="radar-axis-val" fill="${scoreColor(values[i])}">${values[i]}</text>`;
+            axisLabels += `<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" text-anchor="${anchor}" class="radar-axis-label">${axes[i]}</text>`;
+            axisLabels += `<text x="${lx.toFixed(1)}" y="${(ly + 18).toFixed(1)}" text-anchor="${anchor}" class="radar-axis-val" fill="${scoreColor(values[i])}">${values[i]}</text>`;
         }
 
         // 数据多边形
         const dataPts = Array.from({ length: n }, (_, i) => `${px(i, pointR(values[i])).toFixed(1)},${py(i, pointR(values[i])).toFixed(1)}`).join(' ');
 
-        // 数据点标记
+        // 数据点
         let dataMarkers = '';
         for (let i = 0; i < n; i++) {
             const dx = px(i, pointR(values[i])), dy = py(i, pointR(values[i]));
-            dataMarkers += `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="4.5" fill="${scoreColor(values[i])}" stroke="#fff" stroke-width="2"/>`;
+            dataMarkers += `<circle cx="${dx.toFixed(1)}" cy="${dy.toFixed(1)}" r="4" fill="${scoreColor(values[i])}" stroke="#fff" stroke-width="2"/>`;
         }
 
         container.innerHTML = `
             <div class="custom-chart-card radar-card">
-                <h3 class="custom-chart-title">${escapeHtml(title || '维度雷达图')}</h3>
                 <div class="custom-chart-body radar-body">
-                    <svg viewBox="0 0 400 400" class="radar-svg" preserveAspectRatio="xMidYMid meet">
+                    <svg viewBox="0 0 350 350" class="radar-svg" preserveAspectRatio="xMidYMid meet">
                         ${grid}
                         ${scaleLabels}
                         ${axisLines}
-                        <polygon points="${dataPts}" fill="rgba(46,196,182,0.15)" stroke="#2EC4B6" stroke-width="2.5" stroke-linejoin="round"/>
+                        <polygon points="${dataPts}" fill="rgba(46,196,182,0.18)" stroke="#2EC4B6" stroke-width="2.5" stroke-linejoin="round"/>
                         ${dataMarkers}
                         ${axisLabels}
                     </svg>
@@ -424,52 +431,96 @@
 
     /**
      * 渲染所有图表
+     * 策略：
+     * 1. 饼图 → 从代码块解析，渲染辐射仪表盘
+     * 2. 雷达图 → 从维度得分表格提取数据，找到雷达图章节插入SVG，替换原内容
+     * 3. 其他Mermaid图表 → 走Mermaid渲染
      */
     async function renderCharts() {
         try {
-            // 查找所有代码块
+            // ---- 饼图/仪表盘：从代码块渲染 ----
             const allCodeBlocks = reportContainer.querySelectorAll('pre code');
-            const charts = [];
+            const pieCharts = [];
+            const mermaidCharts = [];
 
             allCodeBlocks.forEach((codeBlock) => {
                 const lang = (codeBlock.className || '').replace('language-', '').trim();
                 const text = codeBlock.textContent.trim();
                 const type = lang === 'mermaid' ? detectChartType(text) || 'mermaid' : detectChartType(text);
-                if (type) charts.push({ codeBlock, type, text });
+                if (type === 'pie') pieCharts.push({ codeBlock, text });
+                else if (type === 'radar') return; // 雷达图统一从表格取数，忽略代码块
+                else if (type === 'mermaid') mermaidCharts.push({ codeBlock, text });
             });
 
-            if (charts.length === 0) return;
-
-            for (const { codeBlock, type, text } of charts) {
+            // 渲染饼图（辐射仪表盘）
+            for (const { codeBlock, text } of pieCharts) {
                 const pre = codeBlock.parentElement;
                 if (!pre || !pre.parentElement) continue;
-
                 const container = document.createElement('div');
                 container.className = 'chart-container';
-
-                if (type === 'pie') {
-                    const data = parsePieChartData(text);
-                    renderRadialDashboard(data, container);
-                } else if (type === 'radar') {
-                    const data = parseRadarData(text);
-                    renderClassicRadarChart(data, container);
-                } else {
-                    container.className = 'mermaid';
-                    container.textContent = text;
-                }
-
+                const data = parsePieChartData(text);
+                renderRadialDashboard(data, container);
                 pre.parentElement.replaceChild(container, pre);
             }
 
-            // 渲染剩余 Mermaid 图表
-            const mermaidDivs = reportContainer.querySelectorAll('.mermaid');
-            if (mermaidDivs.length === 0) return;
-            if (typeof mermaid === 'undefined') { console.warn('Mermaid 库未加载'); return; }
+            // ---- 雷达图：从表格提取数据，找到雷达图章节插入 ----
+            const radarData = extractRadarDataFromTable();
+            if (radarData) {
+                const radarHeading = findRadarSection();
+                if (radarHeading) {
+                    // 创建雷达图容器
+                    const radarContainer = document.createElement('div');
+                    radarContainer.className = 'chart-container radar-chart-container';
+                    renderClassicRadarChart(radarData, radarContainer);
 
-            mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
-            for (const div of mermaidDivs) {
-                try { await mermaid.run({ nodes: [div] }); }
-                catch (err) { console.warn('Mermaid 渲染失败:', err); div.classList.add('mermaid-error'); }
+                    // 找到雷达图章节的下一个章节标题
+                    let nextHeading = null;
+                    let el = radarHeading.nextElementSibling;
+                    while (el) {
+                        if (el.tagName && /^H[23]$/.test(el.tagName)) {
+                            nextHeading = el;
+                            break;
+                        }
+                        el = el.nextElementSibling;
+                    }
+
+                    // 移除雷达图章节中的图表元素（pre/code块），保留文字描述
+                    let toRemove = [];
+                    el = radarHeading.nextElementSibling;
+                    while (el && el !== nextHeading) {
+                        const tag = el.tagName || '';
+                        // 移除 pre / code 块（ASCII图或Mermaid代码），以及纯空行的p
+                        if (tag === 'PRE') {
+                            toRemove.push(el);
+                        } else if (tag === 'P' && el.textContent.trim().length < 5) {
+                            toRemove.push(el);
+                        }
+                        el = el.nextElementSibling;
+                    }
+                    toRemove.forEach(e => e.remove());
+
+                    // 在标题后插入新雷达图
+                    radarHeading.after(radarContainer);
+                }
+            }
+
+            // ---- 其他 Mermaid 图表 ----
+            for (const { codeBlock, text } of mermaidCharts) {
+                const pre = codeBlock.parentElement;
+                if (!pre || !pre.parentElement) continue;
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.textContent = text;
+                pre.parentElement.replaceChild(div, pre);
+            }
+
+            const mermaidDivs = reportContainer.querySelectorAll('.mermaid');
+            if (mermaidDivs.length > 0 && typeof mermaid !== 'undefined') {
+                mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+                for (const div of mermaidDivs) {
+                    try { await mermaid.run({ nodes: [div] }); }
+                    catch (err) { console.warn('Mermaid 渲染失败:', err); div.classList.add('mermaid-error'); }
+                }
             }
         } catch (err) {
             console.error('图表渲染异常:', err);
