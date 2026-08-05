@@ -861,6 +861,132 @@ a {
     border: 1px solid #fed7d7;
 }
 
+/* ==================== 自定义图表 ==================== */
+.report-content.markdown-body .chart-container {
+    margin: 1.5em 0;
+}
+
+.custom-chart-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafb 100%);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #e8eef2;
+    box-shadow: 0 2px 12px rgba(74, 144, 164, 0.08);
+}
+
+.custom-chart-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    text-align: center;
+}
+
+.custom-chart-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+/* --- 环形图 --- */
+.donut-wrapper {
+    flex-shrink: 0;
+}
+
+.donut-svg {
+    width: 200px;
+    height: 200px;
+}
+
+.donut-center-val {
+    font-size: 28px;
+    font-weight: 700;
+    fill: #4a90a4;
+}
+
+.donut-center-label {
+    font-size: 12px;
+    fill: #8a9ba8;
+}
+
+.donut-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 180px;
+}
+
+.donut-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.88rem;
+}
+
+.donut-legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.donut-legend-label {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.donut-legend-pct {
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.85rem;
+}
+
+/* --- 雷达图 --- */
+.radar-body {
+    display: block;
+    text-align: center;
+}
+
+.radar-svg {
+    width: 100%;
+    max-width: 380px;
+    height: auto;
+}
+
+.radar-axis-label {
+    font-size: 11px;
+    fill: #5a6a75;
+    font-weight: 500;
+}
+
+.radar-axis-val {
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.radar-series-name {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 8px 0 0 0;
+}
+
+/* 响应式 */
+@media (max-width: 576px) {
+    .custom-chart-body {
+        flex-direction: column;
+    }
+    .donut-svg {
+        width: 160px;
+        height: 160px;
+    }
+    .donut-legend {
+        min-width: 100%;
+    }
+}
+
 /* 链接 */
 .report-content.markdown-body a {
     color: var(--primary);
