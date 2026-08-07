@@ -1,36 +1,36 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
-    /* 主色调：深紫星空系 */
-    --primary-color: #A593D1;
-    --secondary-color: #7B6BA8;
-    --accent-color: #F4D03F;
+    /* 主色调：深紫星空系（匹配月球绵羊背景图） */
+    --primary-color: #B8A4E0;
+    --secondary-color: #8470B8;
+    --accent-color: #F5D65A;
 
     /* 背景色 */
-    --bg-deep: #1E1432;
-    --bg-card: rgba(30, 20, 50, 0.65);
-    --bg-card-solid: #251A3D;
-    --bg-input: rgba(20, 14, 35, 0.6);
+    --bg-deep: #1A0F2E;
+    --bg-card: rgba(26, 15, 46, 0.72);
+    --bg-card-solid: #221639;
+    --bg-input: rgba(18, 10, 32, 0.65);
     --bg-light: rgba(255, 255, 255, 0.06);
 
     /* 文字色 */
-    --text-dark: #EDE8F5;
-    --text-primary: #EDE8F5;
-    --text-secondary: #B8A8D0;
-    --text-muted: #8A7DA8;
+    --text-dark: #F0EBF7;
+    --text-primary: #F0EBF7;
+    --text-secondary: #C0B0D8;
+    --text-muted: #9085B0;
 
     /* 边框 */
-    --border: rgba(165, 147, 209, 0.15);
-    --border-hover: rgba(165, 147, 209, 0.35);
+    --border: rgba(184, 164, 224, 0.18);
+    --border-hover: rgba(184, 164, 224, 0.38);
 
     /* 玻璃效果 */
     --glass-blur: blur(16px);
     --glass-border: 1px solid rgba(255, 255, 255, 0.08);
 
     /* 报告页扩展变量 */
-    --primary: #A593D1;
-    --primary-light: rgba(165, 147, 209, 0.15);
-    --secondary: #7B6BA8;
-    --accent: #F4D03F;
+    --primary: #B8A4E0;
+    --primary-light: rgba(184, 164, 224, 0.15);
+    --secondary: #8470B8;
+    --accent: #F5D65A;
 }
 
 /* ==================== 基础样式 ==================== */
@@ -46,6 +46,7 @@ body {
     background-position: center;
     background-repeat: no-repeat;
     background-attachment: fixed;
+    background-color: var(--bg-deep);
     min-height: 100vh;
     color: var(--text-dark);
     display: flex;
@@ -53,7 +54,7 @@ body {
     position: relative;
 }
 
-/* 背景遮罩层，提升文字可读性 */
+/* 背景遮罩层，提升文字可读性 + 星光氛围 */
 body::before {
     content: '';
     position: fixed;
@@ -61,7 +62,10 @@ body::before {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(135deg, rgba(20, 12, 40, 0.55) 0%, rgba(30, 20, 50, 0.4) 50%, rgba(20, 12, 40, 0.55) 100%);
+    background:
+        radial-gradient(ellipse at 20% 30%, rgba(184, 164, 224, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 70%, rgba(245, 214, 90, 0.05) 0%, transparent 50%),
+        linear-gradient(135deg, rgba(20, 12, 40, 0.5) 0%, rgba(26, 15, 46, 0.35) 50%, rgba(20, 12, 40, 0.5) 100%);
     z-index: -1;
 }
 
@@ -1251,12 +1255,14 @@ a {
         /* 移动端竖版背景 */
         background-image: url('../images/bg-mobile.png');
         background-size: cover;
-        background-position: center;
+        background-position: center top;
         background-attachment: scroll;
     }
 
     body::before {
-        background: linear-gradient(180deg, rgba(20, 12, 40, 0.5) 0%, rgba(30, 20, 50, 0.45) 50%, rgba(20, 12, 40, 0.55) 100%);
+        background:
+            radial-gradient(ellipse at 50% 20%, rgba(184, 164, 224, 0.06) 0%, transparent 60%),
+            linear-gradient(180deg, rgba(20, 12, 40, 0.45) 0%, rgba(26, 15, 46, 0.4) 50%, rgba(20, 12, 40, 0.5) 100%);
     }
 }
 

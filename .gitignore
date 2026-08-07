@@ -16,3 +16,6 @@ Thumbs.db
 # 环境配置
 .env
 .dev.vars
+
+# 原始素材图片（带水印的原图）
+assets/img/
