@@ -1,20 +1,36 @@
 /* ==================== CSS 变量定义 ==================== */
 :root {
-    --primary-color: #4a90a4;
-    --secondary-color: #6b8e9f;
-    --accent-color: #e07a5f;
-    --bg-light: #f8f9fa;
-    --text-dark: #2d3748;
+    /* 主色调：深紫星空系 */
+    --primary-color: #A593D1;
+    --secondary-color: #7B6BA8;
+    --accent-color: #F4D03F;
+
+    /* 背景色 */
+    --bg-deep: #1E1432;
+    --bg-card: rgba(30, 20, 50, 0.65);
+    --bg-card-solid: #251A3D;
+    --bg-input: rgba(20, 14, 35, 0.6);
+    --bg-light: rgba(255, 255, 255, 0.06);
+
+    /* 文字色 */
+    --text-dark: #EDE8F5;
+    --text-primary: #EDE8F5;
+    --text-secondary: #B8A8D0;
+    --text-muted: #8A7DA8;
+
+    /* 边框 */
+    --border: rgba(165, 147, 209, 0.15);
+    --border-hover: rgba(165, 147, 209, 0.35);
+
+    /* 玻璃效果 */
+    --glass-blur: blur(16px);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
 
     /* 报告页扩展变量 */
-    --primary: #4a90a4;
-    --primary-light: #e8f4f8;
-    --secondary: #6b8e9f;
-    --accent: #e07a5f;
-    --bg-card: #ffffff;
-    --text-primary: #2d3748;
-    --text-secondary: #718096;
-    --border: #e2e8f0;
+    --primary: #A593D1;
+    --primary-light: rgba(165, 147, 209, 0.15);
+    --secondary: #7B6BA8;
+    --accent: #F4D03F;
 }
 
 /* ==================== 基础样式 ==================== */
@@ -24,39 +40,87 @@
 
 body {
     font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+    /* PC端横版背景 */
+    background-image: url('../images/bg-pc.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
     min-height: 100vh;
     color: var(--text-dark);
     display: flex;
     flex-direction: column;
+    position: relative;
+}
+
+/* 背景遮罩层，提升文字可读性 */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(20, 12, 40, 0.55) 0%, rgba(30, 20, 50, 0.4) 50%, rgba(20, 12, 40, 0.55) 100%);
+    z-index: -1;
 }
 
 main {
     flex: 1 0 auto;
+    position: relative;
+    z-index: 1;
 }
 
 a {
     transition: color 0.2s;
 }
 
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(20, 14, 35, 0.5);
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(165, 147, 209, 0.3);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(165, 147, 209, 0.5);
+}
+
 /* ==================== 导航栏 ==================== */
 .navbar {
-    background: white !important;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    background: rgba(20, 14, 35, 0.7) !important;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: var(--glass-border);
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
 }
 
 .navbar-brand {
     font-weight: 700;
     color: var(--primary-color) !important;
     font-size: 1.25rem;
+    text-shadow: 0 0 20px rgba(165, 147, 209, 0.4);
 }
 
 .navbar-brand i {
     color: var(--accent-color);
 }
 
+.navbar-toggler {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.navbar-toggler-icon {
+    filter: invert(1) opacity(0.8);
+}
+
 .nav-link {
     font-weight: 500;
+    color: var(--text-secondary) !important;
     transition: color 0.2s;
 }
 
@@ -65,22 +129,26 @@ a {
 }
 
 .nav-link.active {
-    color: var(--primary-color) !important;
+    color: var(--accent-color) !important;
     font-weight: 600;
 }
 
 /* ==================== 卡片组件 ==================== */
 .card {
-    border: none;
+    border: var(--glass-border);
     border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    transition: transform 0.2s, box-shadow 0.2s;
-    background: white;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    color: var(--text-dark);
 }
 
 .card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 36px rgba(0, 0, 0, 0.35);
+    border-color: var(--border-hover);
 }
 
 /* ==================== 按钮组件 ==================== */
@@ -90,34 +158,36 @@ a {
     border-radius: 10px;
     padding: 10px 24px;
     font-weight: 600;
+    color: #fff;
     transition: all 0.25s;
 }
 
 .btn-primary:hover {
     background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(74, 144, 164, 0.3);
+    box-shadow: 0 4px 20px rgba(165, 147, 209, 0.35);
+    color: #fff;
 }
 
 .btn-primary:disabled {
-    opacity: 0.7;
+    opacity: 0.5;
     cursor: not-allowed;
     transform: none;
 }
 
 .btn-accent {
-    background: linear-gradient(135deg, var(--accent-color), #d4664a);
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
     border: none;
-    color: white;
+    color: #1E1432;
     border-radius: 10px;
-    font-weight: 600;
+    font-weight: 700;
     transition: all 0.25s;
 }
 
 .btn-accent:hover {
-    color: white;
+    color: #1E1432;
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(224, 122, 95, 0.3);
+    box-shadow: 0 4px 20px rgba(244, 208, 63, 0.35);
 }
 
 .btn-outline-primary {
@@ -125,46 +195,66 @@ a {
     color: var(--primary-color);
     border-radius: 10px;
     font-weight: 600;
+    background: transparent;
 }
 
 .btn-outline-primary:hover {
     background: var(--primary-color);
     border-color: var(--primary-color);
+    color: #fff;
 }
 
 /* ==================== 表单组件 ==================== */
 .form-control,
 .form-select {
     border-radius: 10px;
-    border: 2px solid #e2e8f0;
+    border: 2px solid var(--border);
     padding: 12px 16px;
+    background: var(--bg-input);
+    color: var(--text-dark);
     transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
 }
 
 .form-control:focus,
 .form-select:focus {
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(74, 144, 164, 0.15);
+    box-shadow: 0 0 0 3px rgba(165, 147, 209, 0.2);
+    background: rgba(20, 14, 35, 0.8);
+    color: var(--text-dark);
+}
+
+.form-select option {
+    background: var(--bg-card-solid);
+    color: var(--text-dark);
 }
 
 /* ==================== 题目卡片 ==================== */
 .question-card {
-    background: white;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border-radius: 16px;
     padding: 24px;
     margin-bottom: 20px;
     border-left: 4px solid var(--primary-color);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-    transition: box-shadow 0.2s;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 4px solid var(--primary-color);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .question-card:hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    border-left-color: var(--accent-color);
 }
 
 .question-card.error {
-    border-left-color: var(--accent-color);
-    background: #fff5f3;
+    border-left-color: #FF6B6B;
+    background: rgba(60, 20, 30, 0.65);
 }
 
 .question-number {
@@ -174,7 +264,7 @@ a {
     width: 28px;
     height: 28px;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: white;
+    color: #fff;
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 700;
@@ -206,14 +296,14 @@ a {
 }
 
 .option-item:hover {
-    background: #e8f4f8;
+    background: rgba(165, 147, 209, 0.12);
     border-color: var(--primary-color);
 }
 
 .option-item.selected {
-    background: #e8f4f8;
+    background: rgba(165, 147, 209, 0.18);
     border-color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(74, 144, 164, 0.15);
+    box-shadow: 0 2px 12px rgba(165, 147, 209, 0.2);
 }
 
 .option-item .form-check {
@@ -224,6 +314,8 @@ a {
 .option-item .form-check-input {
     cursor: pointer;
     margin-top: 0.25em;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--text-muted);
 }
 
 .option-item .form-check-input:checked {
@@ -240,15 +332,18 @@ a {
 
 /* ==================== 引导内容区块 ==================== */
 .section-card {
-    background: white;
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border-radius: 16px;
     padding: 28px;
     margin-bottom: 20px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border: var(--glass-border);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
 }
 
 .section-card h5 {
-    color: var(--primary-color);
+    color: var(--accent-color);
     font-weight: 700;
     margin-bottom: 12px;
 }
@@ -270,7 +365,7 @@ a {
     max-width: 100%;
     border-radius: 12px;
     margin-top: 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* ==================== 徽章 ==================== */
@@ -286,7 +381,7 @@ a {
 
 .badge-ai {
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: white;
+    color: #fff;
     padding: 6px 14px;
     border-radius: 20px;
     font-size: 0.8rem;
@@ -296,29 +391,31 @@ a {
 }
 
 .badge-free {
-    background: linear-gradient(135deg, #48bb78, #38a169);
-    color: white;
+    background: linear-gradient(135deg, #68D391, #48BB78);
+    color: #1A3A2A;
     padding: 6px 14px;
     border-radius: 20px;
     font-size: 0.85rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .badge-price {
-    background: linear-gradient(135deg, var(--accent-color), #d4664a);
-    color: white;
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
+    color: #1E1432;
     padding: 6px 14px;
     border-radius: 20px;
     font-size: 0.85rem;
-    font-weight: 500;
+    font-weight: 700;
 }
 
 /* ==================== 预览提示 ==================== */
 .preview-banner {
-    background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+    background: linear-gradient(135deg, rgba(244, 208, 63, 0.15), rgba(244, 208, 63, 0.08));
+    border: 1px solid rgba(244, 208, 63, 0.3);
     border-radius: 12px;
     padding: 16px;
     margin-bottom: 24px;
+    color: var(--accent-color);
 }
 
 /* ==================== 加载状态 ==================== */
@@ -347,7 +444,7 @@ a {
 
 .empty-state i {
     font-size: 4rem;
-    color: #cbd5e0;
+    color: var(--text-muted);
 }
 
 .empty-state p {
@@ -364,7 +461,7 @@ a {
 
 .error-state i {
     font-size: 4rem;
-    color: var(--accent-color);
+    color: #FF6B6B;
 }
 
 .error-state h4 {
@@ -383,6 +480,11 @@ a {
 
 /* ==================== 提交加载动画 ==================== */
 .submit-loading-card {
+    background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-left: 4px solid var(--primary-color);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-left: 4px solid var(--primary-color);
     text-align: center;
 }
@@ -410,8 +512,9 @@ a {
 
 .hero-section h1 {
     font-weight: 800;
-    color: var(--primary-color);
+    color: #fff;
     letter-spacing: -0.02em;
+    text-shadow: 0 2px 20px rgba(165, 147, 209, 0.3);
 }
 
 .hero-section .lead {
@@ -426,10 +529,12 @@ a {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary-light), #e8f0f4);
+    background: linear-gradient(135deg, rgba(165, 147, 209, 0.2), rgba(123, 107, 168, 0.1));
+    border: 2px solid rgba(165, 147, 209, 0.3);
     margin-bottom: 20px;
     font-size: 2.5rem;
-    color: var(--primary-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 30px rgba(165, 147, 209, 0.2);
 }
 
 /* ==================== 量表卡片 ==================== */
@@ -446,7 +551,7 @@ a {
 }
 
 .scale-card .card-title {
-    color: var(--text-dark);
+    color: #fff;
     font-weight: 700;
 }
 
@@ -464,10 +569,12 @@ a {
 
 /* ==================== 页脚 ==================== */
 .footer {
-    background: white;
+    background: rgba(20, 14, 35, 0.7);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-top: var(--glass-border);
     padding: 24px 0;
     margin-top: 60px;
-    border-top: 1px solid var(--border);
     text-align: center;
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -489,7 +596,7 @@ a {
 }
 
 .footer .footer-links a:hover {
-    color: var(--primary-color);
+    color: var(--accent-color);
 }
 
 /* ==================== 报告页样式 ==================== */
@@ -497,13 +604,16 @@ a {
 /* 报告头部卡片 */
 .report-header-card {
     background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border-radius: 20px;
     padding: 40px 32px;
     text-align: center;
     margin-bottom: 24px;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 4px 24px rgba(74, 144, 164, 0.08);
+    border: var(--glass-border);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
 }
 
 .report-header-card::before {
@@ -524,7 +634,7 @@ a {
 .report-title {
     font-size: 1.6rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #fff;
     margin-bottom: 10px;
 }
 
@@ -540,10 +650,13 @@ a {
 /* 报告主体容器 */
 .report-main-card {
     background: var(--bg-card);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border-radius: 20px;
     padding: 36px 32px;
     margin-bottom: 24px;
-    box-shadow: 0 4px 24px rgba(74, 144, 164, 0.08);
+    border: var(--glass-border);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
 }
 
 /* AI 标签 */
@@ -556,18 +669,18 @@ a {
 .ai-badge-inner {
     display: inline-flex;
     align-items: center;
-    background: linear-gradient(135deg, var(--primary-light), #e8f0f4);
-    border: 1px solid rgba(74, 144, 164, 0.2);
+    background: linear-gradient(135deg, rgba(165, 147, 209, 0.15), rgba(123, 107, 168, 0.08));
+    border: 1px solid rgba(165, 147, 209, 0.25);
     border-radius: 50px;
     padding: 10px 24px;
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--primary);
+    color: var(--primary-color);
 }
 
 .badge-ai-source {
     background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white;
+    color: #fff;
     font-size: 0.75rem;
     padding: 3px 10px;
     border-radius: 20px;
@@ -587,15 +700,15 @@ a {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--primary);
-    opacity: 0.3;
+    background: var(--primary-color);
+    opacity: 0.4;
     flex-shrink: 0;
 }
 
 .divider-line {
     flex: 1;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(74, 144, 164, 0.2), transparent);
+    background: linear-gradient(90deg, transparent, rgba(165, 147, 209, 0.25), transparent);
 }
 
 /* ==================== Markdown 报告内容样式 ==================== */
@@ -609,10 +722,10 @@ a {
 .report-content.markdown-body h1 {
     font-size: 1.7rem;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--accent-color);
     margin: 2.2em 0 0.9em 0;
     padding-bottom: 0.45em;
-    border-bottom: 2.5px solid var(--primary-light);
+    border-bottom: 2.5px solid rgba(165, 147, 209, 0.2);
     letter-spacing: -0.02em;
 }
 
@@ -623,10 +736,10 @@ a {
 .report-content.markdown-body h2 {
     font-size: 1.45rem;
     font-weight: 700;
-    color: var(--text-primary);
+    color: #fff;
     margin: 2em 0 0.75em 0;
     padding-left: 16px;
-    border-left: 5px solid var(--primary);
+    border-left: 5px solid var(--primary-color);
     position: relative;
 }
 
@@ -638,17 +751,17 @@ a {
     transform: translateY(-50%);
     width: 5px;
     height: 70%;
-    background: linear-gradient(180deg, var(--primary), var(--secondary));
+    background: linear-gradient(180deg, var(--primary-color), var(--secondary-color));
     border-radius: 3px;
 }
 
 .report-content.markdown-body h3 {
     font-size: 1.2rem;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--primary-color);
     margin: 1.6em 0 0.6em 0;
     padding-bottom: 0.3em;
-    border-bottom: 1px dashed rgba(74, 144, 164, 0.25);
+    border-bottom: 1px dashed rgba(165, 147, 209, 0.25);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -660,14 +773,14 @@ a {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
     flex-shrink: 0;
 }
 
 .report-content.markdown-body h4 {
     font-size: 1.05rem;
     font-weight: 700;
-    color: var(--secondary);
+    color: var(--secondary-color);
     margin: 1.4em 0 0.5em 0;
 }
 
@@ -692,9 +805,9 @@ a {
 
 /* 加粗文本 */
 .report-content.markdown-body strong {
-    color: var(--primary);
+    color: var(--accent-color);
     font-weight: 700;
-    background: linear-gradient(180deg, transparent 60%, rgba(74, 144, 164, 0.12) 60%);
+    background: linear-gradient(180deg, transparent 60%, rgba(244, 208, 63, 0.12) 60%);
     padding: 0 2px;
 }
 
@@ -711,12 +824,12 @@ a {
 }
 
 .report-content.markdown-body ul li::marker {
-    color: var(--primary);
+    color: var(--primary-color);
     font-size: 1.1em;
 }
 
 .report-content.markdown-body ol li::marker {
-    color: var(--primary);
+    color: var(--primary-color);
     font-weight: 700;
 }
 
@@ -726,14 +839,14 @@ a {
 
 /* 引用块 */
 .report-content.markdown-body blockquote {
-    background: linear-gradient(135deg, #f0f7fa, #e8f4f8);
-    border-left: 4px solid var(--primary);
+    background: linear-gradient(135deg, rgba(165, 147, 209, 0.1), rgba(123, 107, 168, 0.05));
+    border-left: 4px solid var(--primary-color);
     border-radius: 0 14px 14px 0;
     padding: 18px 24px;
     margin: 1.4em 0;
     color: var(--text-primary);
     font-style: normal;
-    box-shadow: 0 2px 8px rgba(74, 144, 164, 0.06);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
 }
 
 .report-content.markdown-body blockquote p:last-child {
@@ -742,14 +855,14 @@ a {
 
 .report-content.markdown-body blockquote strong {
     background: none;
-    color: var(--primary);
+    color: var(--accent-color);
 }
 
 /* 水平分割线 */
 .report-content.markdown-body hr {
     border: none;
     height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(74, 144, 164, 0.25), transparent);
+    background: linear-gradient(90deg, transparent, rgba(165, 147, 209, 0.3), transparent);
     margin: 2.2em 0;
     position: relative;
 }
@@ -760,11 +873,11 @@ a {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%);
-    color: var(--primary);
-    background: var(--bg-card);
+    color: var(--primary-color);
+    background: var(--bg-card-solid);
     padding: 0 12px;
     font-size: 0.7rem;
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 /* 表格 */
@@ -775,13 +888,13 @@ a {
     margin: 1.4em 0;
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
     font-size: 0.92rem;
 }
 
 .report-content.markdown-body thead {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: #fff;
 }
 
 .report-content.markdown-body thead th {
@@ -792,16 +905,17 @@ a {
 }
 
 .report-content.markdown-body tbody tr:nth-child(even) {
-    background: #f8fbfc;
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .report-content.markdown-body tbody tr:hover {
-    background: #edf5f8;
+    background: rgba(165, 147, 209, 0.1);
 }
 
 .report-content.markdown-body tbody td {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
 }
 
 .report-content.markdown-body tbody tr:last-child td {
@@ -810,16 +924,16 @@ a {
 
 /* 代码 */
 .report-content.markdown-body code {
-    background: #f0f4f8;
+    background: rgba(165, 147, 209, 0.12);
     padding: 3px 8px;
     border-radius: 6px;
     font-size: 0.88em;
-    color: var(--accent);
+    color: var(--accent-color);
     font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
 }
 
 .report-content.markdown-body pre {
-    background: #f5f7fa;
+    background: rgba(15, 10, 28, 0.7);
     border-radius: 12px;
     padding: 20px;
     overflow-x: auto;
@@ -839,7 +953,7 @@ a {
     margin: 1.5em 0;
     overflow-x: auto;
     padding: 20px;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 12px;
     border: 1px solid var(--border);
 }
@@ -856,9 +970,9 @@ a {
     white-space: pre-wrap;
     text-align: left;
     padding: 16px;
-    background: #fff5f5;
+    background: rgba(255, 107, 107, 0.1);
     border-radius: 8px;
-    border: 1px solid #fed7d7;
+    border: 1px solid rgba(255, 107, 107, 0.3);
 }
 
 /* ==================== 自定义图表 ==================== */
@@ -867,11 +981,11 @@ a {
 }
 
 .custom-chart-card {
-    background: #fff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 16px;
     padding: 24px;
-    border: 1px solid #e8eef2;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
 }
 
 .custom-chart-title {
@@ -950,22 +1064,16 @@ a {
     color: #5a6a75;
 }
 
-/* 响应式 */
-@media (max-width: 576px) {
-    .custom-chart-card { padding: 16px; }
-    .radial-svg, .radar-svg { max-width: 320px; }
-}
-
 /* 链接 */
 .report-content.markdown-body a {
-    color: var(--primary);
+    color: var(--primary-color);
     text-decoration: none;
-    border-bottom: 1px dashed var(--primary);
+    border-bottom: 1px dashed var(--primary-color);
     transition: all 0.2s;
 }
 
 .report-content.markdown-body a:hover {
-    color: var(--accent);
+    color: var(--accent-color);
     border-bottom-style: solid;
 }
 
@@ -974,7 +1082,7 @@ a {
     max-width: 100%;
     border-radius: 12px;
     margin: 1em 0;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* ==================== 报告操作按钮 ==================== */
@@ -1000,28 +1108,28 @@ a {
 }
 
 .btn-action-print {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: white;
-    box-shadow: 0 4px 16px rgba(74, 144, 164, 0.3);
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(165, 147, 209, 0.3);
 }
 
 .btn-action-print:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 24px rgba(74, 144, 164, 0.4);
-    color: white;
+    box-shadow: 0 6px 28px rgba(165, 147, 209, 0.4);
+    color: #fff;
 }
 
 .btn-action-home {
-    background: var(--bg-card);
-    color: var(--primary);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--primary-color);
     border: 2px solid var(--border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-action-home:hover {
-    border-color: var(--primary);
-    background: var(--primary-light);
-    color: var(--primary);
+    border-color: var(--primary-color);
+    background: rgba(165, 147, 209, 0.1);
+    color: var(--primary-color);
     transform: translateY(-2px);
 }
 
@@ -1037,14 +1145,14 @@ a {
     color: var(--primary-color);
     line-height: 1;
     margin-bottom: 20px;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
 
 .not-found-container h2 {
-    color: var(--text-dark);
+    color: #fff;
     font-weight: 700;
     margin-bottom: 12px;
 }
@@ -1067,7 +1175,7 @@ a {
 }
 
 .back-link:hover {
-    color: var(--primary-color);
+    color: var(--accent-color);
 }
 
 /* ==================== 打印样式 ==================== */
@@ -1081,20 +1189,32 @@ a {
 
     body {
         background: white !important;
+        color: #2d3748 !important;
+    }
+
+    body::before {
+        display: none !important;
     }
 
     .report-header-card,
     .report-main-card {
+        background: white !important;
         box-shadow: none !important;
         border: 1px solid #ddd;
+        color: #2d3748 !important;
     }
 
     .report-header-card::before {
         display: none;
     }
 
+    .report-content.markdown-body {
+        color: #2d3748 !important;
+    }
+
     .report-content.markdown-body strong {
         background: none;
+        color: #4a90a4 !important;
     }
 
     .report-content.markdown-body h2::before {
@@ -1122,6 +1242,21 @@ a {
 
     .option-item {
         padding: 12px 14px;
+    }
+}
+
+/* ==================== 移动端背景切换 ==================== */
+@media (max-width: 768px) {
+    body {
+        /* 移动端竖版背景 */
+        background-image: url('../images/bg-mobile.png');
+        background-size: cover;
+        background-position: center;
+        background-attachment: scroll;
+    }
+
+    body::before {
+        background: linear-gradient(180deg, rgba(20, 12, 40, 0.5) 0%, rgba(30, 20, 50, 0.45) 50%, rgba(20, 12, 40, 0.55) 100%);
     }
 }
 
@@ -1161,4 +1296,7 @@ a {
     .not-found-container .error-code {
         font-size: 5rem;
     }
+
+    .custom-chart-card { padding: 16px; }
+    .radial-svg, .radar-svg { max-width: 320px; }
 }

@@ -77,8 +77,8 @@
                         <path d="M18 30H46" stroke="url(#grad1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
                         <defs>
                             <linearGradient id="grad1" x1="0" y1="0" x2="64" y2="64">
-                                <stop offset="0%" stop-color="#4a90a4"/>
-                                <stop offset="100%" stop-color="#6b8e9f"/>
+                                <stop offset="0%" stop-color="#A593D1"/>
+                                <stop offset="100%" stop-color="#7B6BA8"/>
                             </linearGradient>
                         </defs>
                     </svg>
