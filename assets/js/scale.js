@@ -193,11 +193,19 @@
             return '';
         }).join('');
 
-        // 提交按钮区域
+        // 提交按钮区域（根据量表类型显示不同文案）
+        const isAI = scale.scale_type === 'ai_analysis';
+        const submitBtnText = isAI ? '提交并获取AI分析报告' : '提交并查看测评结果';
+        const loadingTitle = isAI ? '分析中，请稍等' : '正在生成报告';
+        const loadingDesc = isAI
+            ? '我们正在将您的回答提交给 AI 进行深度分析，预计需要 10-30 秒'
+            : '正在为您计算评分并生成个性化报告，请稍候...';
+        const loadingVisuallyHidden = isAI ? '分析中...' : '生成报告中...';
+
         const submitAreaHtml = `
             <div class="d-grid gap-2 mb-5">
                 <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
-                    <i class="bi bi-check-circle-fill me-2"></i>提交并获取分析报告
+                    <i class="bi bi-check-circle-fill me-2"></i>${submitBtnText}
                 </button>
             </div>
 
@@ -205,10 +213,10 @@
             <div id="submitLoading" class="card mb-4 d-none submit-loading-card">
                 <div class="card-body text-center p-4">
                     <div class="spinner-border mb-3" role="status" style="width: 3rem; height: 3rem;">
-                        <span class="visually-hidden">分析中...</span>
+                        <span class="visually-hidden">${loadingVisuallyHidden}</span>
                     </div>
-                    <h5 class="fw-bold mb-2">分析中，请稍等</h5>
-                    <p class="text-muted mb-0">我们正在将您的回答提交给 AI 进行深度分析，预计需要 10-30 秒</p>
+                    <h5 class="fw-bold mb-2">${loadingTitle}</h5>
+                    <p class="text-muted mb-0">${loadingDesc}</p>
                     <div class="progress mt-3" style="height: 6px;">
                         <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%;"></div>
                     </div>

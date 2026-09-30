@@ -15,8 +15,8 @@
     /* 文字色 */
     --text-dark: #F0EBF7;
     --text-primary: #F0EBF7;
-    --text-secondary: #C0B0D8;
-    --text-muted: #9085B0;
+    --text-secondary: #C8B8E0;
+    --text-muted: #B0A0CC;
 
     /* 边框 */
     --border: rgba(184, 164, 224, 0.18);
@@ -38,10 +38,25 @@
     box-sizing: border-box;
 }
 
+/* 覆盖 Bootstrap 默认的 text-muted 深灰色，确保深色背景下可读性 */
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* 覆盖 Bootstrap 5.3 的 body-secondary/tertiary 文字色 */
+.text-body-secondary {
+    color: var(--text-muted) !important;
+}
+
+.text-body-tertiary {
+    color: var(--text-muted) !important;
+    opacity: 0.85;
+}
+
 body {
     font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    /* PC端横版背景 */
-    background-image: url('../images/bg-pc.png');
+    /* PC端横版背景 - 使用压缩后的JPEG */
+    background-image: url('../images/bg-pc.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -52,6 +67,26 @@ body {
     display: flex;
     flex-direction: column;
     position: relative;
+}
+
+/* 动态背景层：淡入显示（无缩放） */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('../images/bg-pc.jpg');
+    background-size: cover;
+    background-position: center;
+    z-index: -2;
+    opacity: 0;
+}
+
+body.bg-ready::after {
+    opacity: 1;
+    transition: opacity 1.5s ease-in;
 }
 
 /* 背景遮罩层，提升文字可读性 + 星光氛围 */
@@ -67,6 +102,32 @@ body::before {
         radial-gradient(ellipse at 80% 70%, rgba(245, 214, 90, 0.05) 0%, transparent 50%),
         linear-gradient(135deg, rgba(20, 12, 40, 0.5) 0%, rgba(26, 15, 46, 0.35) 50%, rgba(20, 12, 40, 0.5) 100%);
     z-index: -1;
+    pointer-events: none;
+}
+
+/* 星光闪烁层 */
+.stars-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.stars-layer .star {
+    position: absolute;
+    border-radius: 50%;
+    background: #fff;
+    animation: twinkle var(--dur, 3s) ease-in-out infinite;
+    animation-delay: var(--delay, 0s);
+}
+
+@keyframes twinkle {
+    0%, 100% { opacity: 0.15; transform: scale(0.6); }
+    50% { opacity: 1; transform: scale(1.6); box-shadow: 0 0 8px 2px var(--star-glow, rgba(255,255,255,0.6)); }
 }
 
 main {
@@ -157,26 +218,28 @@ a {
 
 /* ==================== 按钮组件 ==================== */
 .btn-primary {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
     border: none;
     border-radius: 10px;
     padding: 10px 24px;
     font-weight: 600;
-    color: #fff;
+    color: #1E1432;
     transition: all 0.25s;
+    box-shadow: 0 0 16px rgba(245, 214, 90, 0.35);
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+    background: linear-gradient(135deg, #E8C830, var(--accent-color));
     transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(165, 147, 209, 0.35);
-    color: #fff;
+    box-shadow: 0 0 24px rgba(245, 214, 90, 0.55), 0 4px 20px rgba(245, 214, 90, 0.4);
+    color: #1E1432;
 }
 
 .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+    box-shadow: none;
 }
 
 .btn-accent {
@@ -186,26 +249,30 @@ a {
     border-radius: 10px;
     font-weight: 700;
     transition: all 0.25s;
+    box-shadow: 0 0 16px rgba(245, 214, 90, 0.35);
 }
 
 .btn-accent:hover {
     color: #1E1432;
     transform: translateY(-1px);
-    box-shadow: 0 4px 20px rgba(244, 208, 63, 0.35);
+    box-shadow: 0 0 24px rgba(245, 214, 90, 0.55), 0 4px 20px rgba(244, 208, 63, 0.35);
 }
 
 .btn-outline-primary {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
+    border: 2px solid var(--accent-color);
+    color: var(--accent-color);
     border-radius: 10px;
     font-weight: 600;
     background: transparent;
+    box-shadow: 0 0 12px rgba(245, 214, 90, 0.2);
+    transition: all 0.25s;
 }
 
 .btn-outline-primary:hover {
-    background: var(--primary-color);
-    border-color: var(--primary-color);
-    color: #fff;
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #1E1432;
+    box-shadow: 0 0 20px rgba(245, 214, 90, 0.45);
 }
 
 /* ==================== 表单组件 ==================== */
@@ -267,12 +334,13 @@ a {
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
+    color: #1E1432;
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 700;
     flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(245, 214, 90, 0.35);
 }
 
 .question-text {
@@ -384,14 +452,15 @@ a {
 }
 
 .badge-ai {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
+    color: #1E1432;
     padding: 6px 14px;
     border-radius: 20px;
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
+    box-shadow: 0 0 12px rgba(245, 214, 90, 0.4);
 }
 
 .badge-free {
@@ -487,25 +556,25 @@ a {
     background: var(--bg-card);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
-    border-left: 4px solid var(--primary-color);
+    border-left: 4px solid var(--accent-color);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    border-left: 4px solid var(--primary-color);
+    border-left: 4px solid var(--accent-color);
     text-align: center;
 }
 
 .submit-loading-card .spinner-border {
-    color: var(--primary-color);
+    color: var(--accent-color);
     width: 3rem;
     height: 3rem;
 }
 
 .submit-loading-card h5 {
-    color: var(--primary-color);
+    color: var(--accent-color);
     font-weight: 700;
 }
 
 .submit-loading-card .progress-bar {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
 }
 
 /* ==================== Hero 区域 ==================== */
@@ -533,12 +602,12 @@ a {
     width: 80px;
     height: 80px;
     border-radius: 50%;
-    background: linear-gradient(135deg, rgba(165, 147, 209, 0.2), rgba(123, 107, 168, 0.1));
-    border: 2px solid rgba(165, 147, 209, 0.3);
+    background: linear-gradient(135deg, rgba(245, 214, 90, 0.2), rgba(232, 200, 48, 0.1));
+    border: 2px solid rgba(245, 214, 90, 0.35);
     margin-bottom: 20px;
     font-size: 2.5rem;
     color: var(--accent-color);
-    box-shadow: 0 0 30px rgba(165, 147, 209, 0.2);
+    box-shadow: 0 0 30px rgba(245, 214, 90, 0.25), inset 0 0 20px rgba(245, 214, 90, 0.08);
 }
 
 /* ==================== 量表卡片 ==================== */
@@ -627,8 +696,9 @@ a {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, var(--primary), var(--secondary), var(--accent));
+    background: linear-gradient(90deg, var(--accent-color), #E8C830, var(--accent-color));
     border-radius: 20px 20px 0 0;
+    box-shadow: 0 0 12px rgba(245, 214, 90, 0.4);
 }
 
 .report-header-icon {
@@ -673,23 +743,25 @@ a {
 .ai-badge-inner {
     display: inline-flex;
     align-items: center;
-    background: linear-gradient(135deg, rgba(165, 147, 209, 0.15), rgba(123, 107, 168, 0.08));
-    border: 1px solid rgba(165, 147, 209, 0.25);
+    background: linear-gradient(135deg, rgba(245, 214, 90, 0.15), rgba(232, 200, 48, 0.08));
+    border: 1px solid rgba(245, 214, 90, 0.3);
     border-radius: 50px;
     padding: 10px 24px;
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--primary-color);
+    color: var(--accent-color);
+    box-shadow: 0 0 16px rgba(245, 214, 90, 0.15);
 }
 
 .badge-ai-source {
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
+    color: #1E1432;
     font-size: 0.75rem;
     padding: 3px 10px;
     border-radius: 20px;
     margin-left: 10px;
-    font-weight: 500;
+    font-weight: 600;
+    box-shadow: 0 0 8px rgba(245, 214, 90, 0.35);
 }
 
 /* 分割线 */
@@ -1112,28 +1184,28 @@ a {
 }
 
 .btn-action-print {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: #fff;
-    box-shadow: 0 4px 20px rgba(165, 147, 209, 0.3);
+    background: linear-gradient(135deg, var(--accent-color), #E8C830);
+    color: #1E1432;
+    box-shadow: 0 0 16px rgba(245, 214, 90, 0.35), 0 4px 20px rgba(245, 214, 90, 0.3);
 }
 
 .btn-action-print:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 28px rgba(165, 147, 209, 0.4);
-    color: #fff;
+    box-shadow: 0 0 28px rgba(245, 214, 90, 0.55), 0 6px 28px rgba(245, 214, 90, 0.4);
+    color: #1E1432;
 }
 
 .btn-action-home {
     background: rgba(255, 255, 255, 0.06);
-    color: var(--primary-color);
+    color: var(--accent-color);
     border: 2px solid var(--border);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
 }
 
 .btn-action-home:hover {
-    border-color: var(--primary-color);
-    background: rgba(165, 147, 209, 0.1);
-    color: var(--primary-color);
+    border-color: var(--accent-color);
+    background: rgba(245, 214, 90, 0.1);
+    color: var(--accent-color);
     transform: translateY(-2px);
 }
 
@@ -1252,11 +1324,15 @@ a {
 /* ==================== 移动端背景切换 ==================== */
 @media (max-width: 768px) {
     body {
-        /* 移动端竖版背景 */
-        background-image: url('../images/bg-mobile.png');
+        /* 移动端竖版背景 - 使用压缩后的JPEG */
+        background-image: url('../images/bg-mobile.jpg');
         background-size: cover;
         background-position: center top;
         background-attachment: scroll;
+    }
+
+    body::after {
+        background-image: url('../images/bg-mobile.jpg');
     }
 
     body::before {
