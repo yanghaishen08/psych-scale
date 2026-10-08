@@ -1382,3 +1382,8 @@ a {
     .custom-chart-card { padding: 16px; }
     .radial-svg, .radar-svg { max-width: 320px; }
 }
+
+/* ==================== 独立分享模式（隐藏首页导航） ==================== */
+.standalone-mode .home-only {
+    display: none !important;
+}

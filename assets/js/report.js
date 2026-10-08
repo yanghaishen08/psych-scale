@@ -145,15 +145,19 @@
      * @returns {string} HTML 字符串
      */
     function renderActions() {
+        const fromHome = getUrlParam('from') === 'home';
+        const homeBtn = fromHome
+            ? `<a href="${CONFIG.PAGES.INDEX}" class="btn-action btn-action-home">
+                   <i class="bi bi-house-fill me-2"></i>返回首页
+               </a>`
+            : '';
         return `
             <!-- 操作按钮 -->
             <div class="report-actions">
                 <button class="btn-action btn-action-print" onclick="window.print()">
                     <i class="bi bi-printer-fill me-2"></i>打印报告
                 </button>
-                <a href="${CONFIG.PAGES.INDEX}" class="btn-action btn-action-home">
-                    <i class="bi bi-house-fill me-2"></i>返回首页
-                </a>
+                ${homeBtn}
             </div>
         `;
     }

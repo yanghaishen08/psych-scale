@@ -392,8 +392,9 @@
             const data = await API.submitAnswers(currentScale.id, answers);
 
             if (data.success) {
-                // 跳转到报告页
-                const reportUrl = `${CONFIG.PAGES.REPORT}?id=${encodeURIComponent(data.response_id)}`;
+                // 跳转到报告页，保留 from 参数以维持导航模式
+                const fromParam = getUrlParam('from') === 'home' ? '&from=home' : '';
+                const reportUrl = `${CONFIG.PAGES.REPORT}?id=${encodeURIComponent(data.response_id)}${fromParam}`;
                 window.location.href = reportUrl;
             } else {
                 throw new Error(data.message || '提交失败');
