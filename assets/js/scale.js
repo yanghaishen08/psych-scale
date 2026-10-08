@@ -411,36 +411,51 @@
     /**
      * 显示错误状态
      * @param {string} message - 错误信息
+     * @param {string} [errorCode] - 错误码
      */
-    function showError(message) {
+    function showError(message, errorCode) {
         loadingState.classList.add('d-none');
         errorState.classList.remove('d-none');
         const errorMsg = document.getElementById('errorMessage');
+        const retryBtn = document.getElementById('retryBtn');
+        const homeBtn = document.getElementById('homeBtn');
         if (errorMsg) {
             errorMsg.textContent = message || '加载失败，请稍后重试';
+        }
+
+        // token 过期时显示返回首页按钮，隐藏重试按钮
+        if (errorCode === 'TOKEN_EXPIRED') {
+            if (retryBtn) retryBtn.classList.add('d-none');
+            if (homeBtn) homeBtn.classList.remove('d-none');
+        } else {
+            if (retryBtn) retryBtn.classList.remove('d-none');
+            if (homeBtn) homeBtn.classList.add('d-none');
         }
     }
 
     /**
      * 加载量表数据
      * @param {string} scaleId - 量表ID
+     * @param {string} [token] - 每日分享token
      */
-    async function loadScale(scaleId) {
+    async function loadScale(scaleId, token) {
         loadingState.classList.remove('d-none');
         errorState.classList.add('d-none');
         scaleContent.classList.add('d-none');
 
         try {
-            const data = await API.getScale(scaleId);
+            const data = await API.getScale(scaleId, token);
 
             if (data.success && data.scale) {
                 renderScale(data.scale);
             } else {
-                showError(data.message || '获取量表失败');
+                showError(data.message || '获取量表失败', data.error_code);
             }
         } catch (error) {
             console.error('加载量表失败:', error);
-            showError(error.message || '网络错误，请检查网络连接后重试');
+            // 从错误信息中提取 error_code（如果有的话）
+            const errorCode = error.error_code || null;
+            showError(error.message || '网络错误，请检查网络连接后重试', errorCode);
         }
     }
 
@@ -449,6 +464,7 @@
      */
     function init() {
         const scaleId = getUrlParam('id');
+        const token = getUrlParam('token');
 
         if (!scaleId) {
             showError('缺少量表ID参数');
@@ -466,10 +482,10 @@
         // 绑定重试按钮
         const retryBtn = document.getElementById('retryBtn');
         if (retryBtn) {
-            retryBtn.addEventListener('click', () => loadScale(scaleId));
+            retryBtn.addEventListener('click', () => loadScale(scaleId, token));
         }
 
-        loadScale(scaleId);
+        loadScale(scaleId, token);
     }
 
     // DOM 加载完成后初始化

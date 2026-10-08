@@ -33,7 +33,7 @@
         const category = escapeHtml(scale.category || '心理测评');
         const questionCount = scale.question_count || 0;
         const scaleType = scale.scale_type === 'ai_analysis' ? 'AI分析' : '即时评分';
-        const scaleUrl = `${CONFIG.PAGES.SCALE}?id=${encodeURIComponent(scale.id)}&from=home`;
+        const scaleUrl = `${CONFIG.PAGES.SCALE}?id=${encodeURIComponent(scale.id)}&token=${encodeURIComponent(scale.daily_token || '')}&from=home`;
 
         return `
             <div class="col-md-6 col-lg-4 mb-4">

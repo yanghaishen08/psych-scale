@@ -40,6 +40,7 @@ const API = {
             if (!response.ok) {
                 // 尝试读取服务器返回的具体错误信息
                 let errorMsg = `请求失败 (${response.status})`;
+                let errorCode = null;
                 try {
                     const errorData = await response.json();
                     if (errorData.error) {
@@ -47,10 +48,16 @@ const API = {
                     } else if (errorData.message) {
                         errorMsg = errorData.message;
                     }
+                    if (errorData.error_code) {
+                        errorCode = errorData.error_code;
+                    }
                 } catch (e) {
                     // 响应体不是 JSON，使用默认错误信息
                 }
-                throw new Error(errorMsg);
+                const err = new Error(errorMsg);
+                err.error_code = errorCode;
+                err.status = response.status;
+                throw err;
             }
 
             const data = await response.json();
@@ -74,12 +81,16 @@ const API = {
 
     /**
      * 获取量表详情
-     * GET /api/scale/:id
+     * GET /api/scale/:id?token=xxx
      * @param {string} id - 量表ID
+     * @param {string} [token] - 每日分享token
      * @returns {Promise<object>} { success, scale: {...} }
      */
-    async getScale(id) {
-        return this.request(`/api/scale/${id}`);
+    async getScale(id, token) {
+        const url = token
+            ? `/api/scale/${id}?token=${encodeURIComponent(token)}`
+            : `/api/scale/${id}`;
+        return this.request(url);
     },
 
     /**
