@@ -3,75 +3,843 @@
  *
  * 适用于 custom_result 类型的量表：
  * - 解析 Notion 中的"结果规则"JSON
- * - 根据答案计算总分
- * - 根据分数范围匹配结果
+ * - 支持多种计分方式：sum（简单求和）、multidimensional（多维度）
+ * - 多维度模式支持：维度得分、加权总分、关系类型判别、雷达图、完整报告生成
  *
- * 规则 JSON 格式:
+ * 规则 JSON 格式 - sum 模式:
  * {
- *   "scoring": "sum",           // 计分方式: sum（求和）
+ *   "scoring": "sum",
  *   "ranges": [
  *     { "min": 0, "max": 10, "result": "结果文本1" },
  *     { "min": 11, "max": 20, "result": "结果文本2" }
  *   ]
  * }
+ *
+ * 规则 JSON 格式 - multidimensional 模式（婚姻质量评估等）:
+ * {
+ *   "scoring": "multidimensional",
+ *   "template": "marriage_quality",
+ *   "dimensions": [
+ *     { "key": "C", "name": "沟通质量", "weight": 1.2, "questions": [1,2,3,4] },
+ *     ...
+ *   ],
+ *   "reverse_questions": [26],
+ *   "max_score": 5,
+ *   "stages": {...},
+ *   "types": [...]
+ * }
  */
+
+// ============================================================
+// 工具函数
+// ============================================================
 
 /**
- * 汇总选项分值
- * 遍历所有答案，将选项的分值累加
- *
- * @param {Object} answers - 答题数据 { question_id: option_id | [option_id, ...] | "text" }
- * @param {Array} contentItems - 量表内容项数组（含 question 类型的 options）
- * @returns {number} 总分
+ * 从 contentItems 中构建选项分值查找表
+ * @param {Array} contentItems
+ * @returns {Map} optionId -> score
  */
-function sumScores(answers, contentItems) {
-  let total = 0;
-
-  // 构建选项分值查找表: optionId -> score
-  const optionScores = new Map();
+function buildOptionScoreMap(contentItems) {
+  const map = new Map();
   for (const item of contentItems) {
     if (item.type === 'question' && item.options) {
       for (const opt of item.options) {
-        optionScores.set(opt.id, opt.score || 0);
+        map.set(opt.id, opt.score || 0);
       }
     }
   }
+  return map;
+}
 
-  // 遍历答案累加分值
-  for (const [questionId, answerValue] of Object.entries(answers)) {
-    if (answerValue === null || answerValue === undefined || answerValue === '') {
-      continue;
-    }
+/**
+ * 获取所有计分题目的有序列表（按 sort_order）
+ * @param {Array} contentItems
+ * @returns {Array} 题目数组，每题包含 id, sort_order, options
+ */
+function getScoredQuestions(contentItems) {
+  return contentItems
+    .filter(item => item.type === 'question' && item.question_type === 'single_choice' && item.options && item.options.length > 0)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+}
 
+// ============================================================
+// 简单求和计分
+// ============================================================
+
+function sumScores(answers, contentItems) {
+  let total = 0;
+  const optionScores = buildOptionScoreMap(contentItems);
+
+  for (const [, answerValue] of Object.entries(answers)) {
+    if (answerValue === null || answerValue === undefined || answerValue === '') continue;
     if (Array.isArray(answerValue)) {
-      // 多选题：累加每个选中选项的分值
       for (const optId of answerValue) {
         total += optionScores.get(optId) || 0;
       }
     } else if (typeof answerValue === 'string') {
-      // 单选题：加上选中选项的分值
       total += optionScores.get(answerValue) || 0;
     }
-    // text 类型不计分
   }
-
   return total;
 }
 
+// ============================================================
+// 多维度评分 - 婚姻质量评估
+// ============================================================
+
 /**
- * 计算自定义结果
- *
- * 流程：
- * 1. 解析量表的"结果规则"JSON
- * 2. 根据计分方式计算总分
- * 3. 在 ranges 中匹配分数范围
- * 4. 返回对应的结果文本
- *
- * @param {Object} scale - 量表对象（需包含 result_rules 和 custom_result 字段）
- * @param {Object} answers - 答题数据
- * @param {Array} contentItems - 量表内容项数组
- * @returns {string} 计算结果文本
+ * 计算婚姻质量多维度得分
+ * @param {Object} answers
+ * @param {Array} contentItems
+ * @param {Object} rules
+ * @returns {Object} { dimensions, overall_score, type, report }
  */
+function calculateMarriageQuality(answers, contentItems, rules) {
+  const questions = getScoredQuestions(contentItems);
+  const optionScores = buildOptionScoreMap(contentItems);
+
+  // 只取前32道核心题（排除基本信息和自述题）
+  const coreQuestions = questions.filter((q, idx) => {
+    // 根据题目排序判断：基本信息题 + 引导内容之后的32题是核心题
+    // 更可靠的方式：找到分值在1-5之间的题目（核心题都有分），且排除自述题（分值为0）
+    const hasScoredOptions = q.options && q.options.some(o => (o.score || 0) > 0);
+    return hasScoredOptions;
+  }).slice(0, 32);
+
+  // 构建题目索引 -> 得分的映射
+  const questionScores = [];
+  for (let i = 0; i < coreQuestions.length; i++) {
+    const q = coreQuestions[i];
+    const ans = answers[q.id];
+    let score = 0;
+    if (ans && typeof ans === 'string') {
+      score = optionScores.get(ans) || 0;
+    }
+    questionScores.push({ index: i + 1, score, text: q.text });
+  }
+
+  // 维度配置
+  const dimensions = rules.dimensions || [
+    { key: 'C', name: '沟通质量', weight: 1.2, questions: [1, 2, 3, 4] },
+    { key: 'T', name: '信任与安全感', weight: 1.2, questions: [5, 6, 7, 8] },
+    { key: 'R', name: '冲突解决', weight: 1.0, questions: [9, 10, 11, 12] },
+    { key: 'I', name: '亲密与情感连接', weight: 1.0, questions: [13, 14, 15, 16] },
+    { key: 'V', name: '共同愿景与目标', weight: 1.0, questions: [17, 18, 19, 20] },
+    { key: 'F', name: '财务观念', weight: 1.0, questions: [21, 22, 23, 24] },
+    { key: 'D', name: '家庭角色与分工', weight: 1.0, questions: [25, 26, 27, 28] },
+    { key: 'A', name: '自主与边界', weight: 1.0, questions: [29, 30, 31, 32] },
+  ];
+
+  // 计算各维度得分
+  const dimResults = dimensions.map(dim => {
+    const qScores = dim.questions.map(qNum => {
+      const q = questionScores.find(s => s.index === qNum);
+      return q ? q.score : 0;
+    });
+    const validScores = qScores.filter(s => s > 0);
+    const avg = validScores.length > 0
+      ? validScores.reduce((a, b) => a + b, 0) / validScores.length
+      : 0;
+    const percentile = Math.round((avg / 5) * 100);
+
+    let level = 'warning';
+    if (percentile >= 80) level = 'good';
+    else if (percentile >= 60) level = 'warning';
+    else level = 'danger';
+
+    return {
+      key: dim.key,
+      name: dim.name,
+      weight: dim.weight,
+      avg: Math.round(avg * 10) / 10,
+      percentile,
+      level,
+    };
+  });
+
+  // 计算加权综合指数
+  const totalWeight = dimResults.reduce((sum, d) => sum + d.weight, 0);
+  const weightedSum = dimResults.reduce((sum, d) => sum + d.percentile * d.weight, 0);
+  const overallScore = Math.round(weightedSum / totalWeight);
+
+  // 维度得分变量
+  const dimMap = {};
+  dimResults.forEach(d => { dimMap[d.key] = d.percentile; });
+
+  const C = dimMap['C'] || 0;
+  const T = dimMap['T'] || 0;
+  const R = dimMap['R'] || 0;
+  const I = dimMap['I'] || 0;
+  const V = dimMap['V'] || 0;
+  const F = dimMap['F'] || 0;
+  const D = dimMap['D'] || 0;
+  const A = dimMap['A'] || 0;
+  const M = overallScore;
+
+  const lowDims = dimResults.filter(d => d.percentile < 50).length;
+  const highDims = dimResults.filter(d => d.percentile >= 70).length;
+
+  // 关系类型判别（按优先级）
+  let relType = { name: '重建期型🌱', emoji: '🌱', desc: '', trap: '', solution: '' };
+
+  if (M < 50 || lowDims >= 5) {
+    relType = {
+      name: '情感结冰型🧊',
+      emoji: '🧊',
+      desc: '你们还没分开，但也没什么温度了。关系像一块冰，看起来完整，却冷得刺骨。',
+      trap: '双方都已经习惯了这种低温状态，不知道从哪开始回暖，甚至觉得"就这样吧"。',
+      solution: '先不要急着解决所有问题，从一件小事开始重建连接——比如每天10分钟的非事务性聊天。'
+    };
+  } else if (C < 60 && R < 60 && M < 70) {
+    relType = {
+      name: '需要对话型💬',
+      emoji: '💬',
+      desc: '关系整体还行，但沟通和冲突解决是明显的短板。很多话憋着没说，说了也像没听见。',
+      trap: '越不说越误会，越误会越不想说，最后形成"说了也没用"的恶性循环。',
+      solution: '试试"20分钟不打断对话"——一方说的时候另一方只听不反驳，听完用自己的话复述确认。'
+    };
+  } else if (V >= 80 && D >= 80 && I < 70) {
+    relType = {
+      name: '并肩合伙人型🏠',
+      emoji: '🏠',
+      desc: '你们是最好的队友——把家经营得井井有条，但偶尔忘了你们还是恋人。',
+      trap: '日子太稳定了，稳定到有点平淡。亲密感慢慢被生活琐事稀释，像室友多过像伴侣。',
+      solution: '每周安排一次"约会时间"，不聊孩子、不聊家务，就像谈恋爱时那样单纯待在一起。'
+    };
+  } else if (I >= 80 && C >= 70 && (F < 60 || D < 60)) {
+    relType = {
+      name: '热恋保温型🔥',
+      emoji: '🔥',
+      desc: '你们还爱着，感情浓度很高，但日子不止有爱——有些现实问题开始冒头了。',
+      trap: '觉得"有爱就够了"，但财务观念不合或分工不均这些现实问题，会慢慢消耗感情。',
+      solution: '把"钱"和"家务"也当成感情的一部分来谈，越早面对，感情越稳。'
+    };
+  } else if (A >= 80 && I < 70 && C < 80) {
+    relType = {
+      name: '相敬如宾型🤝',
+      emoji: '🤝',
+      desc: '你们很尊重对方，边界感很好，但客气到有点疏远。相敬如宾，也相敬如"冰"。',
+      trap: '太客气了反而不亲，什么都"没事""都行"，真实的需求藏在心里不说。',
+      solution: '试着跟对方说一个你真实的小不满——不是吵架，是让对方知道你也有脾气。'
+    };
+  } else if (M >= 50 && M <= 70 && highDims >= 1) {
+    relType = {
+      name: '重建期型🌱',
+      emoji: '🌱',
+      desc: '关系有起伏，有些地方不错，有些地方需要改善。你们知道有问题，但你们还在努力。',
+      trap: '容易因为"看不到进展"而灰心，或者把问题想得太大，觉得改不了。',
+      solution: '不要想着一次性解决所有问题，从最低分的那个维度开始，一个一个来。'
+    };
+  } else {
+    // 兜底
+    if (M >= 70 && dimResults.every(d => d.percentile >= 60)) {
+      const maxDim = dimResults.reduce((a, b) => a.percentile > b.percentile ? a : b);
+      if (['C', 'T', 'I'].includes(maxDim.key)) {
+        relType = {
+          name: '热恋保温型🔥',
+          emoji: '🔥',
+          desc: '你们的关系感情基础很好，沟通和信任都很扎实。',
+          trap: '感情好的时候容易忽略现实问题，等问题变大了才发现。',
+          solution: '在感情好的时候提前"打预防针"——聊聊钱、聊聊未来规划，让关系更稳。'
+        };
+      } else if (['V', 'D', 'F'].includes(maxDim.key)) {
+        relType = {
+          name: '并肩合伙人型🏠',
+          emoji: '🏠',
+          desc: '你们是很好的生活合伙人，把日子过得有条有理。',
+          trap: '太专注于"过日子"，容易忘了"谈恋爱"。',
+          solution: '生活要经营，感情也要经营——给彼此留一些"非事务性"的时间。'
+        };
+      } else {
+        relType = {
+          name: '相敬如宾型🤝',
+          emoji: '🤝',
+          desc: '你们互相尊重，各自独立，是很成熟的关系模式。',
+          trap: '独立过头了容易有距离感，觉得对方"不需要我"。',
+          solution: '偶尔"麻烦"对方一下——依赖也是一种亲密。'
+        };
+      }
+    } else if (M < 50) {
+      relType = {
+        name: '情感结冰型🧊',
+        emoji: '🧊',
+        desc: '关系温度偏低，需要认真面对。',
+        trap: '冰冻三尺非一日之寒，解冻也需要时间和耐心。',
+        solution: '从最小的善意开始——一句关心的话、一个拥抱，都是在融化冰层。'
+      };
+    }
+  }
+
+  // 排序维度
+  const sortedDims = [...dimResults].sort((a, b) => b.percentile - a.percentile);
+  const topDims = sortedDims.slice(0, 2);
+  const bottomDims = sortedDims.slice(-2).reverse();
+
+  // 自述题答案
+  let selfWord = null;
+  let selfImprove = null;
+  for (const item of contentItems) {
+    if (item.type === 'question' && item.sort_order > 35 && item.options) {
+      const ans = answers[item.id];
+      if (!ans) continue;
+      const opt = item.options.find(o => o.id === ans);
+      if (opt) {
+        if (item.text.includes('形容') || item.text.includes('一个词')) {
+          selfWord = opt.text.replace(/^[A-J]\.\s*/, '').split(/[——\-]/)[0].trim();
+        } else if (item.text.includes('改善') || item.text.includes('最需要')) {
+          selfImprove = opt.text.replace(/^[A-H]\.\s*/, '').split(/[——\-]/)[0].trim();
+        }
+      }
+    }
+  }
+
+  // 生成雷达图 mermaid 代码
+  const radarCode = `radar\n    title 婚姻质量雷达图\n    维度 得分\n    ${dimResults.map(d => `${d.name} ${d.percentile}`).join('\n    ')}`;
+
+  // 生成维度表格
+  const levelEmoji = { good: '✅', warning: '⚠️', danger: '🔴' };
+  const levelText = { good: '优势区', warning: '待发展区', danger: '脆弱区' };
+
+  const dimTable = `| 维度 | 原始均分 | 百分制 | 评定 |\n|------|---------|--------|------|\n` +
+    dimResults.map(d => `| ${d.name} | ${d.avg.toFixed(1)} | ${d.percentile} | ${levelEmoji[d.level]} ${levelText[d.level]} |`).join('\n');
+
+  // 行动建议（按最低分维度生成）
+  const suggestions = bottomDims.map((dim, idx) => {
+    const priority = idx === 0 ? 'P1（最紧急）' : 'P2（重要）';
+    const tips = getSuggestionTips(dim.key);
+    return `### ${priority}：改善${dim.name}（${dim.percentile}分）\n\n${tips.detail}\n\n**具体做法：**\n${tips.actions.map(a => `- ${a}`).join('\n')}`;
+  }).join('\n\n');
+
+  // P3 长期建议
+  const p3Suggestion = `### P3（长期）：保持关系温度\n\n好的关系不是一劳永逸的，需要持续经营。把它当成一个长期项目，定期复盘和调整。\n\n**具体做法：**\n- 每月一次"关系复盘"：聊聊这个月哪里好、哪里可以更好\n- 每年一个"关系小目标"：比如一起学个新东西、一起去一个新地方\n- 保持仪式感：纪念日、生日、属于你们的特殊日子`;
+
+  // 优势解读
+  const strengthAnalysis = topDims.map(dim => {
+    const info = getDimensionInfo(dim.key);
+    return `### ${dim.name}（${dim.percentile}分）——${info.tagline}\n\n${info.strength}\n\n**这实际意味着什么：** ${info.whatItMeans}\n\n**可量化参考：** ${info.quantitative}`;
+  }).join('\n\n');
+
+  // 风险点解读
+  const riskAnalysis = bottomDims.map(dim => {
+    const info = getDimensionInfo(dim.key);
+    return `### ${dim.name}（${dim.percentile}分）——${info.riskTag}\n\n${info.risk}\n\n**问题结构：** ${info.structure}\n\n**可量化参考：** ${info.riskQuantitative}\n\n**可控节点：** ${info.controlPoint}`;
+  }).join('\n\n');
+
+  // 自述题呼应
+  let selfEcho = '';
+  if (selfWord || selfImprove) {
+    selfEcho = '\n\n### 你的自述和测评结果的呼应\n\n';
+    if (selfWord) {
+      selfEcho += `你选择用"${selfWord}"来形容你们的关系。这和我们判定的${relType.name}有${selfWordMatches(selfWord, relType.name) ? '很高的一致性' : '一定的关联'}，说明你对关系的感受是准确的。\n\n`;
+    }
+    if (selfImprove) {
+      const matchingDim = dimResults.find(d => d.name.includes(selfImprove) || selfImprove.includes(d.name.slice(0, 2)));
+      if (matchingDim) {
+        selfEcho += `你觉得最需要改善的是"${selfImprove}"，而${matchingDim.name}确实是得分较低的维度（${matchingDim.percentile}分）。这说明你对关系的痛点很清楚，知道从哪下手就成功了一半。`;
+      } else {
+        selfEcho += `你觉得最需要改善的是"${selfImprove}"，这可能是你感受最强烈的地方，即使它不是得分最低的维度，也值得认真对待。`;
+      }
+    }
+  }
+
+  // 昵称
+  let name = '朋友';
+  for (const item of contentItems) {
+    if (item.type === 'question' && item.question_type === 'text_input') {
+      const ans = answers[item.id];
+      if (ans && typeof ans === 'string' && ans.trim()) {
+        name = ans.trim();
+        break;
+      }
+    }
+  }
+
+  // 整体描述
+  const shapeDesc = getShapeDescription(sortedDims);
+
+  // 组装完整报告（Markdown）
+  const report = `# 婚姻质量评估报告
+
+> ${name}，这是你和你们关系的一份"体检报告"。它不是给你们的关系打分定罪，而是帮你看清此刻的状态——哪里好、哪里需要关注、可以从哪里开始改善。
+
+---
+
+## 一、综合婚姻质量指数
+
+**综合估算：约 ${overallScore}%**
+
+本指数由8个维度得分加权平均得出，其中**沟通质量**和**信任与安全感**权重 ×1.2（这两个维度对关系质量影响最大），其余维度 ×1.0。
+
+它反映了你当前对这段关系的主观满意度和健康程度，不是对关系结局的预测，而是帮你看见关系此刻的状态。
+
+---
+
+## 二、各维度得分明细
+
+${dimTable}
+
+评定标准：✅ 优势区（≥80分） | ⚠️ 待发展区（60-79分） | 🔴 脆弱区（<60分）
+
+---
+
+## 三、雷达图
+
+\`\`\`mermaid
+${radarCode}
+\`\`\`
+
+---
+
+## 四、整体关系画像
+
+${shapeDesc}
+
+**最高维度：** ${topDims.map(d => `${d.name}（${d.percentile}分）`).join('、')}
+
+**最低维度：** ${bottomDims.map(d => `${d.name}（${d.percentile}分）`).join('、')}
+
+整体来看，你们的关系${overallScore >= 70 ? '整体健康，有明显的优势，也有可以提升的空间' : overallScore >= 50 ? '处于中等水平，有亮点也有明显的短板，需要针对性改善' : '面临较多挑战，多个维度需要关注，建议认真对待'}。
+${selfEcho}
+---
+
+## 五、关系类型标签
+
+你的关系类型最接近：**${relType.name}**
+
+**类型特征：** ${relType.desc}
+
+**典型困境：** ${relType.trap}
+
+**破局方向：** ${relType.solution}
+
+---
+
+## 六、关系优势解读
+
+${strengthAnalysis}
+
+---
+
+## 七、关系风险点解读
+
+${riskAnalysis}
+
+---
+
+## 八、行动建议
+
+${suggestions}
+
+${p3Suggestion}
+
+---
+
+## 九、总结寄语
+
+${name}，这次评估的核心发现：
+
+1. **你们最核心的优势是${topDims[0].name}（${topDims[0].percentile}分）**——这是你们关系的压舱石，不管遇到什么问题，这个优势都能帮你们撑过去。
+
+2. **最需要关注的是${bottomDims[0].name}（${bottomDims[0].percentile}分）**——它不是关系的全部，但它正在影响你们关系的整体温度，越早面对越好。
+
+3. **从${bottomDims[0].name}开始，每周做一件小事**——不用一下子解决所有问题，坚持一个月，你会感觉到变化。
+
+关系不是考试，没有满分，也没有标准答案。重要的不是你们现在有多少分，而是你们愿意一起往更好的方向走。只要两个人都还在努力，关系就还有温度，就还能变好。
+
+---
+
+> **重要提醒**：本测试仅为关系状态的自我评估工具，反映当前主观感受，不能替代专业婚姻咨询或心理治疗。如果关系中存在暴力、严重控制或长期冷暴力，请寻求专业帮助。
+`;
+
+  return report;
+}
+
+// ============================================================
+// 辅助函数：维度信息
+// ============================================================
+
+function getDimensionInfo(key) {
+  const info = {
+    'C': {
+      tagline: '你们能好好说话',
+      strength: '沟通是你们关系的一大优势。你们能心平气和地交流，对方愿意听，你也愿意说。这是所有健康关系的基础。',
+      whatItMeans: '这意味着你们遇到问题时，大概率能通过沟通解决，不会让矛盾积压。很多关系的问题不是问题本身，而是沟通不畅导致的——而你们没有这个困扰。',
+      quantitative: '研究显示，沟通质量高的夫妻，关系满意度比沟通差的夫妻高出40%以上，离婚风险降低约60%。',
+      riskTag: '有些话该说没说',
+      risk: '沟通是你们关系中比较薄弱的一环。可能是说了对方不听，也可能是怕吵架所以不说。不管哪种，话憋着憋着，心就远了。',
+      structure: '沟通问题通常不是单一的——不会沟通导致冲突升级，冲突升级后更不想沟通，形成恶性循环。它还会影响信任和亲密感。',
+      riskQuantitative: '沟通不畅的伴侣中，约70%会在3年内出现明显的关系满意度下降。',
+      controlPoint: '不需要一下子变成"沟通高手"，先做到一件事：对方说话的时候，你放下手机认真听，听完用自己的话复述一遍确认。'
+    },
+    'T': {
+      tagline: '你在关系里很安心',
+      strength: '信任和安全感是你们关系的基石。你相信对方，不用担心这担心那，对关系的稳定性有信心。',
+      whatItMeans: '这意味着你在这段关系里是放松的，不用时刻提防，不用反复确认对方爱不爱你。这种安心感是很多人求而不得的。',
+      quantitative: '安全感高的关系中，双方的心理压力水平显著更低，身体免疫力也更好——信任真的能"养生"。',
+      riskTag: '心里总有不安',
+      risk: '信任和安全感是关系的地基，地基不稳，上面盖得再好也容易塌。你可能经常胡思乱想，或者对对方的行为过度解读。',
+      structure: '安全感不足往往和过往经历有关（不一定是对方的问题），但它会影响关系的方方面面——你会更容易猜忌、更容易受伤、更难放松。',
+      riskQuantitative: '安全感低的伴侣，关系冲突的频率是安全感高的伴侣的2-3倍，而且冲突后的修复时间更长。',
+      controlPoint: '先不要急着"让对方给你安全感"，试着区分一下：哪些不安是对方的行为确实有问题，哪些是你自己的旧伤在痛。'
+    },
+    'R': {
+      tagline: '吵架不伤感情',
+      strength: '你们的冲突处理能力很强。吵架能和好，不会冷战，不会人身攻击，就事论事。这是关系的"修复力"。',
+      whatItMeans: '再相爱的两个人也会吵架，区别不是吵不吵，而是吵完之后能不能和好。你们有这个能力，这意味着关系有很强的"弹性"。',
+      quantitative: '冲突后能主动修复的伴侣，关系满意度随时间下降的速度比不会修复的伴侣慢3倍以上。',
+      riskTag: '一吵就伤感情',
+      risk: '冲突解决是你们关系中比较脆弱的部分。可能一吵就冷战，可能翻旧账，可能说伤人的话。每次吵架都是一次消耗。',
+      structure: '冲突解决能力差，会让每一次矛盾都在关系里留一道疤。疤多了，感情就硬了、脆了。它还会让沟通变得更难——因为怕吵架，所以不说。',
+      riskQuantitative: '经常冷战或言语攻击的伴侣，关系破裂的风险是健康伴侣的4倍。',
+      controlPoint: '约定一个"休战手势"——吵架吵到一定程度，任何一方做出这个手势，双方都先停下，冷静20分钟再谈。'
+    },
+    'I': {
+      tagline: '你们还在恋爱',
+      strength: '亲密感和情感连接是你们的优势。你们之间有温度、有亲近，不是搭伙过日子的室友。',
+      whatItMeans: '这意味着你们对彼此还有吸引力，还能感受到对方的爱。这种情感连接是关系抵御平淡和挫折的最好武器。',
+      quantitative: '保持高亲密感的伴侣，关系满意度在结婚10年后仍能维持在较高水平，而亲密感低的伴侣通常在3-5年内就明显下降。',
+      riskTag: '越来越像室友',
+      risk: '亲密感是你们关系中比较薄弱的部分。可能身体上的亲近变少了，可能感觉对方没那么爱你了，可能在一起的时候不放松。',
+      structure: '亲密感下降通常不是突然发生的，而是被生活慢慢磨掉的——工作忙、孩子累、压力大，不知不觉就疏远了。它又会反过来影响沟通和信任。',
+      riskQuantitative: '有孩子之后，约60%的夫妻报告亲密感明显下降，其中约一半在孩子上学后也没能恢复。',
+      controlPoint: '不用急着"恢复到热恋时的样子"，先从每天一个拥抱、睡前聊5分钟天这种小事开始。'
+    },
+    'V': {
+      tagline: '你们朝着同一个方向',
+      strength: '你们对未来有共同的期待，重要的事情能商量着来。这种"并肩感"让关系很稳。',
+      whatItMeans: '这意味着你们不是各过各的，而是真的在"一起过日子"。大方向一致，小摩擦就不会动摇根本。',
+      quantitative: '有共同生活目标的夫妻，长期关系稳定性比目标不一致的夫妻高出50%以上。',
+      riskTag: '好像各过各的',
+      risk: '共同愿景和目标感是你们关系中的短板。你们可能对未来的想法不太一样，或者重要的事总是一个人说了算。',
+      structure: '没有共同目标的关系，就像两艘一起出发但航向不同的船——刚开始离得近，时间越长离得越远。它会影响亲密感和分工满意度。',
+      riskQuantitative: '在"人生方向"上存在严重分歧的伴侣，分手/离婚的风险是共识型伴侣的2.5倍。',
+      controlPoint: '找个时间认真聊一次：你想要的生活是什么样的？5年后的我们是什么样？看看哪些地方是一致的，哪些地方可以妥协。'
+    },
+    'F': {
+      tagline: '钱的事你们拎得清',
+      strength: '财务观念是你们的优势。你们能坦诚谈钱，消费观念接近，有规划。钱不成为你们的矛盾点。',
+      whatItMeans: '这很难得——很多关系都是因为钱的问题出矛盾的。你们在钱上达成的共识，是关系稳定的重要保障。',
+      quantitative: '财务观念一致的夫妻，关系冲突的频率比财务冲突多的夫妻低约45%。',
+      riskTag: '钱的事总说不拢',
+      risk: '财务观念是你们关系中比较薄弱的部分。可能消费习惯不一样，可能钱的事不透明，可能没有规划。',
+      structure: '钱的问题从来不是"钱"的问题——它背后是安全感、控制权、价值观的冲突。钱上的矛盾又会渗透到关系的其他方面。',
+      riskQuantitative: '因金钱问题频繁争吵的伴侣，离婚风险比财务和谐的伴侣高出约30%。',
+      controlPoint: '先不谈"谁对谁错"，先做一件事：把每个月的收入和支出摊开来看，像看一份报表一样，不带情绪。'
+    },
+    'D': {
+      tagline: '分工公平，心里不委屈',
+      strength: '家庭角色和分工是你们的优势。家务和育儿分配公平，对方能看到你的付出，你也满意。',
+      whatItMeans: '这意味着你们不是一个人在扛这个家。公平的分工让每个人都觉得自己的付出被看见、被尊重，心里没有怨气。',
+      quantitative: '家务分工公平的夫妻，关系满意度比分不均的夫妻高出约35%，性生活频率也更高。',
+      riskTag: '一个人扛得太多了',
+      risk: '家庭分工是你们关系中比较明显的短板。可能你承担了大部分，可能心里有怨气，可能觉得对方觉得理所当然。',
+      structure: '分工不公的问题，刚开始可能只是"有点累"，但累积累怨，怨气积累成心寒。它会严重影响亲密感和情绪状态。',
+      riskQuantitative: '感觉家务分工严重不公的一方，抑郁和焦虑的风险是感觉公平的人的2.3倍。',
+      controlPoint: '列一张"家里所有的事"的清单，然后两个人一起分——不是按"该谁做"来分，而是按"谁更愿意做/更擅长做"来分。'
+    },
+    'A': {
+      tagline: '你在关系里还是你自己',
+      strength: '自主和边界是你们的优势。你在关系里不用委屈自己，有自己的空间，对方尊重你。',
+      whatItMeans: '这意味着你们的关系是"两个完整的人在一起"，而不是"两个人合成一个人"。健康的边界让关系更长久。',
+      quantitative: '保持适度个人空间的伴侣，关系倦怠的速度比"完全黏在一起"的伴侣慢约40%。',
+      riskTag: '有点透不过气',
+      risk: '自主和边界感是你们关系中需要关注的部分。可能你需要为了关系委屈自己，可能没有自己的空间，可能对方总想改变你。',
+      structure: '没有边界的关系，刚开始可能觉得是"亲密"，时间长了会变成"窒息"。一方越想抓，另一方越想逃。',
+      riskQuantitative: '在关系中感觉"失去自我"的人，关系满意度逐年下降的速度是保持自我的人的2倍。',
+      controlPoint: '从一件小事开始建立边界——比如"周末我需要半天自己的时间"。不是不爱了，是为了更好地爱。'
+    },
+  };
+  return info[key] || info['C'];
+}
+
+function getSuggestionTips(key) {
+  const tips = {
+    'C': {
+      detail: '沟通是关系的血脉——血脉不通，全身都不舒服。改善沟通不需要变成话术高手，只需要建立一些基本规则。',
+      actions: [
+        '每天留10分钟"专注聊天时间"：不看手机，不聊孩子/家务，就聊各自的心情和想法',
+        '学一个"说话公式"：我感觉+因为+我希望。比如"我感觉有点失落，因为你刚才一直在看手机，我希望你能听我说说话"',
+        '吵架后24小时内要有一个人先"搭梯子"——不一定是认错，可以是递一杯水、问一句饿不饿'
+      ]
+    },
+    'T': {
+      detail: '安全感不是对方"给"的，是两个人一起建的。有的不安来自对方的行为，有的来自自己的过去，要区分开。',
+      actions: [
+        '和对方做一次"安全感对话"：告诉对方什么事会让你不安，对方告诉你他/她的什么行为是出于爱',
+        '建立"报平安"的小习惯：晚归说一声，有事提前说——不是查岗，是让对方安心',
+        '如果不安主要来自自己的过去，考虑和专业咨询师聊聊——这不是你的错，但需要你来面对'
+      ]
+    },
+    'R': {
+      detail: '再亲密的人也会吵架，关键不是不吵，而是吵完能和好。修复能力比"不吵架"更重要。',
+      actions: [
+        '约定吵架规则：不人身攻击、不翻旧账、不说分手/离婚',
+        '设置"暂停键"：吵到一定程度，任何一方都可以喊暂停，20分钟后再聊',
+        '每次吵完，不管谁对谁错，做一件修复的小事——递杯水、抱一下、说句软话'
+      ]
+    },
+    'I': {
+      detail: '亲密感不是自然而然就有的，它需要主动维护。日子越忙，越要给感情留时间。',
+      actions: [
+        '每周安排一次"约会时间"——至少2小时，不聊孩子不聊家务，就像谈恋爱时一样',
+        '每天至少有一个身体接触——拥抱、牵手、摸摸头，身体接触会分泌催产素，增加亲密感',
+        '睡前聊10分钟天——不是聊今天做了什么，而是聊今天的感受和想法'
+      ]
+    },
+    'V': {
+      detail: '两个人朝同一个方向看，关系才会稳。不需要所有事都一致，但大方向要合。',
+      actions: [
+        '认真聊一次"5年后的我们"——各自说自己的期待，然后找共同点和可以妥协的地方',
+        '一起定一个"今年的小目标"——不一定是买房买车，可以是一起学一个新东西、一起去一个地方',
+        '重要决定一起做——不是"一个人说了算另一个人配合"，是两个人商量着来'
+      ]
+    },
+    'F': {
+      detail: '钱的问题本质上是安全感和价值观的问题。不谈钱的关系，迟早要为钱吵架。',
+      actions: [
+        '每个月"对账"一次——一起看看这个月花了多少、存了多少、下个月怎么规划',
+        '设一个"共同账户"和"个人账户"——共同开销从共同账户出，个人开销各自说了算',
+        '聊钱的时候就聊数字，不要上升到"你不爱我"——钱是钱，感情是感情，分开谈'
+      ]
+    },
+    'D': {
+      detail: '分工不公是关系里最常见的"隐形消耗"——不是什么大事，但一直消耗着人的感情。',
+      actions: [
+        '列一张"所有家务事"的清单——包括看得见的（做饭扫地）和看不见的（记着买什么、安排事情）',
+        '按"意愿+擅长"来分工，不是按"应该"来分——谁更愿意做谁做，谁擅长谁做',
+        '每季度复盘一次分工——什么事太辛苦可以外包，什么事可以一起做，什么事可以简化'
+      ]
+    },
+    'A': {
+      detail: '好的关系是"我们很好，但我也很好"。失去自我的关系，迟早会让人想逃。',
+      actions: [
+        '每周留半天"个人时间"——你做你的事，对方做对方的事，不用黏在一起',
+        '保持至少一个和对方无关的爱好或朋友圈——你是你自己，然后才是伴侣',
+        '学会说"我不想"——不用每次都委屈自己来换和平，真实的你比"懂事"的你更值得被爱'
+      ]
+    },
+  };
+  return tips[key] || tips['C'];
+}
+
+function getShapeDescription(sortedDims) {
+  const highest = sortedDims[0];
+  const lowest = sortedDims[sortedDims.length - 1];
+  const range = highest.percentile - lowest.percentile;
+
+  if (range < 15) {
+    return '你的雷达图整体比较**均衡**——没有特别突出的长板，也没有特别严重的短板。这种关系通常比较稳定，但也可能有点平淡。';
+  } else if (range > 40) {
+    return `你的雷达图呈**"高低错落"**的形态——${highest.name}是明显的长板（${highest.percentile}分），而${lowest.name}是明显的短板（${lowest.percentile}分）。优势很突出，但短板也在拉低整体体验。`;
+  } else {
+    return `你的雷达图呈**"稳步倾斜"**的形态——${highest.name}相对较好（${highest.percentile}分），${lowest.name}相对较弱（${lowest.percentile}分），整体有一定差异，但不是极端分化。`;
+  }
+}
+
+function selfWordMatches(word, typeName) {
+  const matchMap = {
+    '温暖': ['热恋保温', '重建期'],
+    '感恩': ['热恋保温', '重建期'],
+    '并肩': ['并肩合伙人'],
+    '平淡': ['相敬如宾', '并肩合伙人'],
+    '习惯': ['相敬如宾', '并肩合伙人'],
+    '疲惫': ['情感结冰', '需要对话'],
+    '孤独': ['情感结冰', '需要对话'],
+    '疏离': ['情感结冰', '需要对话'],
+    '窒息': ['需要对话', '情感结冰'],
+  };
+  const types = matchMap[word] || [];
+  return types.some(t => typeName.includes(t));
+}
+
+// ============================================================
+// 角色匹配计分 - 武林外传·同福客栈人格测试
+// ============================================================
+
+const WULIN_CHARACTERS = [
+  {
+    name: '郭芙蓉型', emoji: '⚔️',
+    story: '某天夜里，同福客栈来了几个闹事的人，佟湘玉还在拨算盘，白展堂已经准备战略转移，吕秀才刚张嘴说"子曾经曰过"，你已经一脚踹开门冲了出去，大喊"排山倒海"，结果把门框打歪，闹事者吓跑，佟湘玉在后面心疼门框，白展堂默默把门框扶正，吕秀才小声说："其实可以先谈判。"你回头一笑："谈判？我不是正在谈吗？"第二天，你一边修门一边请大家吃糖葫芦，仿佛昨晚什么都没发生。',
+    analysis: '郭芙蓉型的人，心理能量通常向外释放。你不太喜欢内耗，遇到压力时第一反应是"做点什么"，哪怕做得不完美，也比干等着强。你的情绪像七侠镇的鞭炮，响得大，散得快。你的安全感来自行动本身，而不是周全计划。优点是勇敢、真诚、有生命力；风险是容易冲动、边界感偏弱、有时把"我为你好"变成"我先打为敬"。你需要练习的不是压抑热情，而是在热情和后果之间加一个小暂停键。三秒钟，足够让排山倒海变成精准打击。',
+  },
+  {
+    name: '佟湘玉型', emoji: '💰',
+    story: '同福客栈连续三天没客人，你表面说"没事，咱们省着点"，晚上却一个人在账房把每盏灯都调暗。白展堂想安慰你，刚开口说"要不我去借点"，你立刻抬头："借？利息谁还？"吕秀才提议写促销文案，莫小贝提议卖糖葫芦，李大嘴提议先吃一顿。最后你叹口气："额滴神啊，还是开门吧。"第二天，你笑着迎客，像昨晚那个发愁的人不是你。',
+    analysis: '佟湘玉型的人，往往把"稳定"看得比"自由"更重要。你对钱不是贪，而是钱代表安全、秩序和责任感。你擅长照顾全局，容易自动承担别人的问题。别人觉得你精明，其实你只是害怕失控。你的心理韧性很强，但代价是长期紧绷。你不太习惯示弱，因为你觉得一松手，整个店就会散。可心理学上有个小秘密：适度依赖别人，不会让你变弱，反而会让关系更稳。你不需要永远当掌柜，偶尔也可以当那个被照顾的人。',
+  },
+  {
+    name: '吕秀才型', emoji: '📚',
+    story: '某次同福客栈被诬陷卖假酒，众人都急了。郭芙蓉要打，白展堂要跑，佟湘玉要哭，李大嘴要先把假酒喝了证明没事。你慢悠悠翻出一本账册，指出酒坛编号、进货日期和县衙记录对不上。慕容嫣本来要封店，听完后沉默三秒，说"重新查"。众人欢呼，你已经退到角落继续看书，仿佛刚刚只是顺手解了个题。',
+    analysis: '吕秀才型的人，心理世界丰富，但外部表达偏克制。你习惯先观察再判断，不太喜欢情绪化的场面。你的优势是逻辑、洞察、延迟满足能力强；你的风险是容易过度分析，导致行动拖延，也容易因为"说了也没人听"而主动沉默。你内心其实渴望被看见，但又害怕被推到台前。对你来说，最重要的心理练习是：把"我知道"变成"我说出来"。不用每次都引经据典，一句"我觉得这样不对"就够。你的脑子不是用来躲的，是用来照亮别人的。',
+  },
+  {
+    name: '白展堂型', emoji: '🏃',
+    story: '邢捕头来查"盗圣重现江湖"，你立刻表示"我只是个跑堂的"。结果邢捕头一走，他就摸黑去把真正的贼引开，顺便把赃物挂到县衙门口。第二天大家夸"不知道哪位大侠帮忙"，你打个哈欠："可能是风吧。"佟湘玉看你一眼，郭芙蓉看你一眼，吕秀才也看你一眼。你咳嗽一声："风挺大。"',
+    analysis: '白展堂型的人，核心心理冲突是"能力"与"安全感"的拉扯。你聪明、灵活、适应力强，但你不太信任"被期待"这件事。你害怕被架上去，也害怕承担责任后失去自由。所以你常用幽默、拖延、装傻来降低压力。可你的保护欲和忠诚度其实很高，只是不愿意承认。你属于那种"平时最滑，关键时刻最靠得住"的人。你需要练习的是：允许自己认真。认真不等于被绑住，站出来也不等于失去退路。',
+  },
+  {
+    name: '祝无双型', emoji: '🧹',
+    story: '同福客栈大扫除，郭芙蓉打碎两个碗，莫小贝弄翻一桶水，李大嘴把厨房烧出烟，白展堂说"我去买新碗"然后消失。你一句话没说，把碗扫了、水拖了、烟扇了，还煮了一锅面。大家坐下吃面时才发现你没上桌。佟湘玉喊："无双呢？"你在厨房小声说："你们先吃，我把灶台再擦一遍。"',
+    analysis: '祝无双型的人，往往有很强的共情力和责任感，但边界感偏弱。你习惯通过"有用"来确认自己的位置，害怕拒绝别人，也害怕让别人失望。你的温柔是真的，但你的疲惫也是真的。心理学上，这叫"过度补偿型利他"：你照顾别人，不只是因为善良，也因为你需要被需要。问题是，长期这样，你会把委屈吞成沉默。你要练习的不是变冷漠，而是把"放着我来"改成"这次你来"，把"我没事"改成"我有点累"。你值得被爱，不是因为你做了什么，而是因为你本身。',
+  },
+  {
+    name: '李大嘴型', emoji: '🍖',
+    story: '同福客栈面临倒闭危机，佟湘玉在算账，白展堂在想退路，郭芙蓉要出去打工，吕秀才要写联名信。你端出一锅红烧肉，说："先吃，吃完再愁。"大家本来没胃口，结果一人一筷子，气氛居然缓和了。莫小贝说："大嘴叔，你救了我们。"你挠头："我没救啊，我就是觉得肉不能凉。"',
+    analysis: '李大嘴型的人，心理调节方式偏"当下满足"。你不太喜欢宏大焦虑，更相信具体的生活：一顿饭、一张床、一个鸡腿。你的优势是情绪恢复快、不记仇、不攀比，能给别人带来烟火气和安全感。你的风险是容易回避深层问题，用吃喝、搞笑、拖延来绕开压力。你不是没心没肺，你只是觉得人生已经够累，何必再给自己加戏。对你来说，最好的成长不是变得多卷，而是在知足之外，偶尔给自己定一个小小的、具体的目标。比如：今天不只吃鸡腿，还学一道新菜。',
+  },
+  {
+    name: '莫小贝型', emoji: '🍭',
+    story: '你逃学去听说书，回来时发现佟湘玉已经拿着鸡毛掸子在门口等。你立刻扑上去："嫂子，我给你带了糖！"佟湘玉板着脸："少来。"你又说："我还给你画了像！"画上佟湘玉头大身子小，旁边写着"最美掌柜"。佟湘玉嘴角抽动，最后说："下次不许逃学。"你点头，第二天照逃，但给佟湘玉带了一包花生。',
+    analysis: '莫小贝型的人，内心住着一个高能量、高好奇、低压抑的小孩。你情感直接，想要就说，不开心就闹，恢复得也快。你的心理优势是创造力、生命力和真实感；风险是冲动、规则感弱、容易让别人替你收拾后果。你其实很聪明，知道谁真的对你好，所以你用调皮试探边界，也用撒娇维系关系。对你来说，成长不是把天真扔掉，而是学会在"我想"后面加上"但我也要考虑"。你可以继续当小贝，但别让爱你的人永远当后勤。',
+  },
+  {
+    name: '邢捕头型', emoji: '👮',
+    story: '你奉命调查同福客栈"疑似窝藏盗圣"。你一进门就板着脸："公事公办！"佟湘玉端上一碗热面，李大嘴加了个鸡腿，郭芙蓉夸你"七侠镇最威风捕头"，吕秀才说"您这气质至少是个总捕头"。你咳嗽一声："这个嘛......证据不足，先观察。"出门后你对燕小六说："记住，办案要讲人情。"燕小六一脸崇拜，完全没发现面钱还没给。',
+    analysis: '邢捕头型的人，心理需求里有两个关键词：认可和面子。你希望被看见、被尊重、被当成重要人物。你并不坏，甚至很热心，但你容易被"别人怎么看我"影响判断。你的自信有时是表演出来的，用来盖住内心的不确定。你擅长在规则和人情之间找缝隙，这让你显得圆滑，也让你有时失去原则。你的成长方向是：把自我价值从"别人捧不捧"转到"我到底做没做对"。偶尔谦虚一下，不会掉价，反而更让人信服。',
+  },
+  {
+    name: '燕小六型', emoji: '🔥',
+    story: '夜里同福客栈进了一只猫，你听见动静，立刻拔刀大喊："有贼！照顾好我七舅姥爷！"全客栈被吵醒。郭芙蓉以为有架打，白展堂已经上了房，吕秀才抱着书躲桌下，佟湘玉披着衣服冲出来。结果一只猫从厨房窜出。你愣住，然后严肃地说："此猫形迹可疑，我带回衙门审问。"莫小贝抱住猫："你敢！"你立刻改口："那就......保释。"',
+    analysis: '燕小六型的人，心理结构简单直接：忠诚、行动、归属。你的安全感来自"我属于一个队伍"，你的价值感来自"我能保护别人"。你不擅长复杂算计，也不喜欢模棱两可。优点是勇敢、可靠、执行力强；风险是容易被煽动、容易误判、行动快于思考。你其实很需要被肯定，一句"小六，你做得对"就能让你充满电。你需要练习的是：在拔刀之前，先问一句"真的是贼吗？"勇敢不等于鲁莽，真正的保护也包括不误伤。',
+  },
+  {
+    name: '小米型', emoji: '👁️',
+    story: '同福客栈丢了一只烧鸡，大家怀疑来怀疑去。郭芙蓉怀疑白展堂，白展堂怀疑李大嘴，李大嘴怀疑莫小贝，莫小贝怀疑猫。你蹲在门口，慢悠悠说："今早有个穿蓝衣服的，从后门出去，嘴里有油。"众人顺着线索找到隔壁怡红楼的小厮。你又补一句："他还欠我三个包子。"大家惊讶看你，你缩缩脖子："我就是顺便看见。"',
+    analysis: '小米型的人，属于低存在感、高观察力的类型。你不太争抢注意力，但你对环境、人情、气氛非常敏感。你习惯用"弱势姿态"降低别人防备，从而获得信息和安全空间。你的优势是洞察力强、适应力高、懂得自保；风险是过于被动，容易把自己放在边缘位置，也容易用自嘲掩盖真实需求。你其实知道很多，只是不确定说出来会不会惹麻烦。你需要练习的是：相信自己的观察有价值。你不是局外人，你只是站得比较低，所以看得比较清。',
+  },
+  {
+    name: '展红绫型', emoji: '📖',
+    story: '你来七侠镇追查盗圣，住在同福客栈。白展堂每次经过都心虚，郭芙蓉以为她要抓人，佟湘玉担心影响生意。结果你大部分时间都在写小说，偶尔抬头问："你们这里有没有一个轻功很好、长得还行、但特别怂的人？"白展堂立刻说"没有"。你点点头，继续写。后来你抓到了真正的贼，临走前把小说留在桌上，扉页写："献给同福客栈，尤其是那个说没有的人。"',
+    analysis: '展红绫型的人，内心有很强的自我叙事感。你需要人生有意义、有方向、有作品感。你不容易被日常琐事完全困住，因为你总在观察、记录、想象另一种可能。你的优势是目标感、审美、独立性；风险是容易抽离，显得冷淡，也可能因为追求理想而忽略眼前关系。你并非不在乎，只是你习惯用距离保护自己。你需要练习的是：允许自己停留。不是每一站都要有结果，有些地方只是让你写下一章。',
+  },
+  {
+    name: '杨蕙兰型', emoji: '💪',
+    story: '你路过七侠镇，在同福客栈吃饭。郭芙蓉听说你武功高，非要切磋。两人从院子打到屋顶，白展堂在下面喊"别打坏瓦"，佟湘玉在算修瓦钱，李大嘴端着一碗面边看边吃。最后你赢了半招，郭芙蓉不服："再来！"你收手："你不错，但太急。"你坐下吃面，忽然说："这面还行。"李大嘴感动得差点哭。',
+    analysis: '杨蕙兰型的人，心理防御偏强，价值感建立在能力与独立上。你害怕软弱，因为软弱曾让你受伤。你习惯用强大筛选关系，觉得能接住你攻击的人，才配看见你的脆弱。你的优势是果断、坚韧、不内耗；风险是容易把亲密关系变成竞技场，也容易拒绝真正关心你的人。你不是不需要爱，你只是怕爱让你失去控制。你需要练习的是：把"你能打过我吗"偶尔换成"你今天能不能陪我坐一会儿"。真正的强，不是永远赢，而是敢在安全的人面前输一次。',
+  },
+  {
+    name: '钱掌柜型', emoji: '💼',
+    story: '你偷偷来同福客栈借钱，说想给钱夫人买生日礼物，但私房钱被没收了。佟湘玉感动，借了你二两。白展堂问："你怕她干嘛？"你叹气："不是怕，是尊重。"结果钱夫人突然出现，你立刻躲到桌下。钱夫人冷笑："出来吧，我早看见了。"你爬出来，举起礼物："夫人，惊喜！"钱夫人愣住，最后说："回家再说。"',
+    analysis: '钱掌柜型的人，心理核心是回避冲突与维持关系。你善良、心软、愿意妥协，但常常压抑自己的需求。你不是没有主见，而是害怕冲突带来的后果。你习惯用讨好、退让、小聪明来维持和平。优点是温和、顾家、懂得体谅；风险是长期委屈、边界模糊、容易被人拿捏。你需要练习的是：在小事上表达不同意见。比如"我不想""我不太舒服""这次听我的"。你会发现，关系不会因为你有边界就崩，反而会更真实。',
+  },
+  {
+    name: '钱夫人型', emoji: '👑',
+    story: '怡红楼和同福客栈抢生意，你亲自上门下战书。佟湘玉笑眯眯倒茶，你拍桌："少来这套！"郭芙蓉要动手，白展堂准备溜，吕秀才开始讲市场规律。你听完冷笑："说得好，但我不听。"最后你赢了当天客流，却发现佟湘玉悄悄给乞丐发了馒头，口碑反而更好。你沉默一会儿，说："这招......下次我也用。"',
+    analysis: '钱夫人型的人，心理能量强，控制欲和竞争意识也强。你习惯用强势保护自己，因为你觉得一旦示弱，就会被占便宜。你的优势是执行、谈判、抗压；风险是过度防御，把关系都变成输赢。你其实很讲道理，只是不喜欢先低头。你需要练习的是：在不输的情况下，也能柔软。温柔不是认输，是另一种掌控。你不需要一直赢，偶尔让别人赢一次，你反而会得到更多合作。',
+  },
+  {
+    name: '赛貂蝉型', emoji: '🎭',
+    story: '七侠镇举办商会，你把怡红楼的摊位做成全场最热闹的地方。你拉邢捕头站台，请慕容嫣剪彩，给小米发免费包子，连白展堂都被拉去表演轻功。同福客栈本来只想卖茶，佟湘玉看得直咬牙。结果你主动过来："佟姐姐，咱们联名吧，你出菜，我出人。"佟湘玉犹豫，吕秀才说："这叫资源互补。"你笑："秀才懂我。"',
+    analysis: '赛貂蝉型的人，心理安全感来自社会资源和外部认可。你擅长察言观色，知道怎样让别人舒服，也知道怎样把关系变成机会。你的优势是社交智能、目标感、行动力；风险是容易过度包装，忽略真实情感，也容易把自我价值绑在"有没有用"上。你不是虚伪，你只是相信世界需要经营。你需要练习的是：在不用表演的时候，也相信自己值得被喜欢。人脉会流动，真心才留得住人。',
+  },
+  {
+    name: '姬无命型', emoji: '🌫️',
+    story: '你闯入同福客栈，大家如临大敌。郭芙蓉准备动手，白展堂准备跑，佟湘玉准备赔钱。你却坐下来问吕秀才："我是谁？"吕秀才一愣，开始从哲学讲到记忆。两人越聊越玄，郭芙蓉睡着了，李大嘴煮了面。最后你吃完面，说："我好像不是我。"吕秀才点头："但面是你吃的。"你若有所思地走了。',
+    analysis: '姬无命型的人，心理主题是身份认同与存在焦虑。你可能经常问自己"我到底是谁""我想要什么""我为什么在这里"。这不是矫情，而是你的自我意识比较强，只是暂时没有稳定答案。你的优势是思考深、不随波逐流；风险是容易陷入虚无、行动瘫痪，也容易被别人定义。你需要练习的是：把大问题拆小。今天吃什么、今天想做什么、今天和谁在一起舒服。身份不是想出来的，是活出来的。先吃面，再想人生。',
+  },
+  {
+    name: '白三娘型', emoji: '🧠',
+    story: '同福客栈被诬陷偷了官银，慕容嫣要封店。你慢悠悠走进来，先夸慕容嫣衣服好看，再问县衙最近是不是换了师爷，最后说："我儿子虽然怂，但偷东西会留记号，你们查了吗？"慕容嫣一愣，回去重查，发现真凶是师爷。佟湘玉松口气，白展堂小声说："娘，你差点把我卖了。"你笑："卖你？你值几个钱？"',
+    analysis: '白三娘型的人，心理成熟度高，防御也强。你经历过风浪，所以不容易被表象骗。你擅长用经验、话术和观察力掌控局面。你的优势是判断准、护短、有资源；风险是控制欲强，容易替别人做决定，也容易让年轻人觉得被压住。你其实很关心人，只是表达方式偏"我来处理"。你需要练习的是：信任别人有能力处理自己的事。经验可以分享，但不必代替。给年轻人留空间，他们才会真正长大。',
+  },
+  {
+    name: '金湘玉型', emoji: '✨',
+    story: '你来七侠镇送一封信，结果租了马车、雇了乐队、撒了花瓣，从镇口一路到同福客栈。佟湘玉以为来了大客户，郭芙蓉以为来了明星，白展堂以为来了追兵。你下车微笑："信呢？哦，在车上。"吕秀才帮你找到信，发现只是普通家书。你说："家书也要有仪式感。"佟湘玉沉默，然后问："你这套花了多少？"',
+    analysis: '金湘玉型的人，心理需求里"被看见"和"审美价值"很重要。你擅长营造氛围，也愿意为体面投入。你的优势是自信、社交力、审美和表现力；风险是容易过度在意外界评价，把精力花在包装上，忽略真实感受。你并非虚荣，你只是相信生活不该灰头土脸。你需要练习的是：在没有人鼓掌的时候，也认可自己。你不需要红毯才能发光，你本身就是光源。',
+  },
+  {
+    name: '慕容嫣型', emoji: '⚖️',
+    story: '同福客栈丢了一枚官印，你封锁现场，逐个问话。佟湘玉说"我是掌柜"，你说"掌柜也要排队"。白展堂想溜，被你一眼盯住。郭芙蓉不耐烦，你说"妨碍公务罪加一等"。最后发现是莫小贝拿去当玩具。你沉默三秒，对莫小贝说："归还证物，下不为例。"莫小贝递回官印，小声说："姐姐你好酷。"你嘴角动了一下，又立刻板回去。',
+    analysis: '慕容嫣型的人，心理结构偏规则导向。你需要秩序、边界、可预测性，才能感到安全。你的优势是专业、可靠、原则性强；风险是过于死板，容易显得不近人情，也可能用规则隔离情感。你并非没有温度，只是你相信"先讲规矩，再讲感情"才安全。你需要练习的是：在规则之外，允许一点弹性。偶尔笑一下、通融一次，不会让你的专业崩塌，反而会让你更像一个完整的人。',
+  },
+  {
+    name: '佟石头型', emoji: '🪨',
+    story: '你来同福客栈帮忙，听说有人欠账不还，立刻拍胸脯："姐，我去要！"你带着棍子出门，回来时账没要到，反倒把欠债人的门修好了，还搭进去一顿饭。佟湘玉气得捂心口："额滴神啊！"你挠头："但他家孩子挺可怜的。"郭芙蓉拍他肩："兄弟，你是个好人。"白展堂补刀："好人，但不是好账房。"',
+    analysis: '佟石头型的人，心理核心是义气、冲动和归属。你重视家人和朋友，愿意为他们出头。你的行动力强，但计划性弱；情感真挚，但边界模糊。你容易因为"我想帮忙"而卷入别人的问题，最后自己承担后果。你的优势是忠诚、热心、不虚伪；风险是依赖性强、责任感不足、让亲近的人替你收拾。你需要练习的是：在出手前问一句"这是我该管的吗？我承担得起吗？"义气不是替所有人挡刀，而是先把自己站稳。',
+  },
+];
+
+function calculateCharacterMatch(answers, contentItems, rules) {
+  const questions = getScoredQuestions(contentItems);
+  const optionScores = buildOptionScoreMap(contentItems);
+
+  const charCounts = {};
+  const questionChars = [];
+
+  for (const q of questions) {
+    const ans = answers[q.id];
+    if (!ans || typeof ans !== 'string') {
+      questionChars.push(0);
+      continue;
+    }
+    const charIndex = optionScores.get(ans) || 0;
+    if (charIndex > 0) {
+      charCounts[charIndex] = (charCounts[charIndex] || 0) + 1;
+      questionChars.push(charIndex);
+    } else {
+      questionChars.push(0);
+    }
+  }
+
+  let maxCount = 0;
+  let tiedChars = [];
+
+  for (const [idx, count] of Object.entries(charCounts)) {
+    const countNum = Number(count);
+    if (countNum > maxCount) {
+      maxCount = countNum;
+      tiedChars = [Number(idx)];
+    } else if (countNum === maxCount) {
+      tiedChars.push(Number(idx));
+    }
+  }
+
+  let mainCharIdx = tiedChars[0];
+  if (tiedChars.length > 1) {
+    for (let i = questionChars.length - 1; i >= 0; i--) {
+      const charIdx = questionChars[i];
+      if (tiedChars.includes(charIdx)) {
+        mainCharIdx = charIdx;
+        break;
+      }
+    }
+  }
+
+  let secondMaxCount = 0;
+  let secondCharIdx = 0;
+  for (const [idx, count] of Object.entries(charCounts)) {
+    const countNum = Number(count);
+    if (Number(idx) === mainCharIdx) continue;
+    if (countNum > secondMaxCount) {
+      secondMaxCount = countNum;
+      secondCharIdx = Number(idx);
+    }
+  }
+
+  const mainChar = WULIN_CHARACTERS[mainCharIdx - 1] || WULIN_CHARACTERS[0];
+  const subChar = secondCharIdx > 0 ? WULIN_CHARACTERS[secondCharIdx - 1] : null;
+
+  let report = `## 你的同福客栈角色：${mainChar.name} ${mainChar.emoji}\n\n`;
+  report += `<div style="font-size: 1.15em; font-weight: bold; font-style: italic; line-height: 1.8; color: #F5D547; text-shadow: 0 0 3px rgba(245, 213, 71, 0.6), 0 0 6px rgba(245, 213, 71, 0.3);">${mainChar.story}</div>\n\n`;
+  report += `### 心理分析\n\n${mainChar.analysis}\n\n`;
+
+  if (subChar) {
+    report += `---\n\n`;
+    report += `### 你的副类型：${subChar.name} ${subChar.emoji}\n\n`;
+    report += `<div style="font-size: 1.15em; font-weight: bold; font-style: italic; line-height: 1.8; color: #F5D547; text-shadow: 0 0 3px rgba(245, 213, 71, 0.6), 0 0 6px rgba(245, 213, 71, 0.3);">${subChar.story}</div>\n\n`;
+    report += `#### 副类型的心理分析\n\n${subChar.analysis}\n\n`;
+  }
+
+  report += `---\n\n`;
+  report += `> 这不是给你贴标签，而是给你一面镜子。武林外传里的人都不完美，但他们都活得很认真。你也可以。`;
+
+  return report;
+}
+
+// ============================================================
+// 主函数：计算自定义结果
+// ============================================================
+
 function calculateCustomResult(scale, answers, contentItems) {
   // 1. 解析结果规则 JSON
   let rules = null;
@@ -79,39 +847,50 @@ function calculateCustomResult(scale, answers, contentItems) {
     try {
       rules = JSON.parse(scale.result_rules);
     } catch (e) {
-      // JSON 解析失败，回退到自定义结果文本
       console.error('结果规则 JSON 解析失败:', e.message);
       return scale.custom_result || '暂无结果';
     }
   }
 
   // 2. 如果没有规则，直接返回自定义结果文本
-  if (!rules || !rules.ranges || !Array.isArray(rules.ranges) || rules.ranges.length === 0) {
+  if (!rules) {
     return scale.custom_result || '暂无结果';
   }
 
-  // 3. 根据计分方式计算总分
+  // 3. 根据计分方式计算
   const scoringMethod = rules.scoring || 'sum';
-  let totalScore = 0;
 
-  if (scoringMethod === 'sum') {
-    totalScore = sumScores(answers, contentItems);
-  } else {
-    // 默认使用求和
-    totalScore = sumScores(answers, contentItems);
+  if (scoringMethod === 'character_match') {
+    return calculateCharacterMatch(answers, contentItems, rules);
   }
 
-  // 4. 在 ranges 中匹配分数范围
-  for (const range of rules.ranges) {
-    const min = range.min !== undefined ? range.min : -Infinity;
-    const max = range.max !== undefined ? range.max : Infinity;
+  if (scoringMethod === 'jungian_history') {
+    return calculateJungianHistory(answers, contentItems, rules);
+  }
 
-    if (totalScore >= min && totalScore <= max) {
-      return range.result || scale.custom_result || '暂无结果';
+  if (scoringMethod === 'multidimensional') {
+    // 多维度模式
+    const template = rules.template || 'default';
+    if (template === 'marriage_quality') {
+      return calculateMarriageQuality(answers, contentItems, rules);
+    }
+    // 其他多维度模板可以在这里扩展
+    return calculateMarriageQuality(answers, contentItems, rules);
+  }
+
+  // 4. 默认：简单求和 + 范围匹配
+  const totalScore = sumScores(answers, contentItems);
+
+  if (rules.ranges && Array.isArray(rules.ranges) && rules.ranges.length > 0) {
+    for (const range of rules.ranges) {
+      const min = range.min !== undefined ? range.min : -Infinity;
+      const max = range.max !== undefined ? range.max : Infinity;
+      if (totalScore >= min && totalScore <= max) {
+        return range.result || scale.custom_result || '暂无结果';
+      }
     }
   }
 
-  // 5. 未匹配到任何范围，返回默认结果
   return scale.custom_result || `您的得分是 ${totalScore} 分。`;
 }
 
@@ -122,4 +901,292 @@ function calculateCustomResult(scale, answers, contentItems) {
 export {
   calculateCustomResult,
   sumScores,
+  calculateMarriageQuality,
+  calculateCharacterMatch,
+  calculateJungianHistory,
 };
+
+// ============================================================
+// 荣格八维历史人物计分 - 你的历史人格
+// ============================================================
+
+const JUNGIAN_FUNCTIONS = ['Se', 'Si', 'Ne', 'Ni', 'Te', 'Ti', 'Fe', 'Fi'];
+
+const FUNC_NAMES = {
+  Se: '外倾感觉', Si: '内倾感觉', Ne: '外倾直觉', Ni: '内倾直觉',
+  Te: '外倾思维', Ti: '内倾思维', Fe: '外倾情感', Fi: '内倾情感',
+};
+
+const FUNC_DESCS = {
+  Se: '活在当下，行动力强，善于捕捉现实机会',
+  Si: '重视经验和传统，细节记忆力强，追求稳定',
+  Ne: '发散思维，善于联想，看到无限可能性',
+  Ni: '洞察本质，预见未来，善于提炼深层规律',
+  Te: '目标导向，高效执行，善于组织调度',
+  Ti: '逻辑分析，追求精确，善于建构理论体系',
+  Fe: '关注他人感受，善于协调关系，重视和谐',
+  Fi: '忠于内心价值观，共情深刻，追求真实',
+};
+
+const HISTORY_TYPES = [
+  {
+    name: '秦始皇', mbti: 'ENTJ', image: 'qinshihuang',
+    keywords: '铁腕统一者 · 制度设计狂 · 不安的征服者',
+    functions: ['Te', 'Ni', 'Se', 'Fi', 'Ti', 'Ne', 'Si', 'Fe'],
+    life: '嬴政十三岁即位，二十二岁亲政，三十九岁统一六国。他的人生像一场不断加速的狂奔：废分封、立郡县，书同文、车同轨，修驰道、筑长城。他每天批阅的奏章要用秤称，"不中呈不得休息"——不看完一石（约合今天的六十斤）竹简不睡觉。他五次巡游天下，最后死在巡游路上。后人骂他暴君，但毛泽东说"劝君少骂秦始皇，焚坑事业要商量"。他是一个用整个天下做实验的人，只是实验的代价是无数人的命。他修了阿房宫，也修了骊山陵；他统一了文字，也焚了书。',
+    analysis: '你的主导功能Te让你天然具备组织、调度和决策的能力。你看到问题会本能地想"怎么解决"，看到混乱会本能地想"怎么建立秩序"。你的辅助功能Ni给你长远的战略眼光，让你不满足于解决眼前问题，而是要设计一套能运转千年的系统。秦始皇修郡县制、统一度量衡，都是Ni+Te的典型产物——用一个宏大的愿景驱动高效的执行。\n\n你的困难在于：第四功能Fi（内倾情感）处于劣势位置，意味着你容易忽视自己和他人的情感需求。秦始皇一生未立皇后，对母亲赵姬的失望影响了他对亲密关系的信任。你可能也有类似的问题——事业上势如破竹，却在亲密关系中感到笨拙或疏离。\n\n迈向更高层次：发展你的第三功能Se，它能帮你回到当下，感受生活的质感，而不是永远活在"下一个目标"里。同时，有意识地练习Fi——问问自己"我真正在乎的是什么"，而不只是"什么是最有效的"。',
+  },
+  {
+    name: '张良', mbti: 'INTJ', image: 'zhangliang',
+    keywords: '谋圣 · 功成身退的智者 · 内敛的洞察者',
+    functions: ['Ni', 'Te', 'Fi', 'Se', 'Ti', 'Ne', 'Si', 'Fe'],
+    life: '张良，韩国贵族之后，秦灭韩后倾家荡产求刺客刺秦王，在博浪沙掷出的大铁椎误中副车。逃亡下邳时，在桥上遇到一个老头——就是那个著名的"圯上老人"。老头让他捡鞋、穿鞋，反复刁难，张良忍了。老人说"孺子可教"，给了他一部《太公兵法》。此后张良成了刘邦的首席谋士，鸿门宴上救刘邦一命，荥阳之战献"下邑之谋"扭转楚汉格局。刘邦称帝后，他说"愿弃人间事，欲从赤松子游"，功成身退，成为汉初三杰中唯一善终的人。',
+    analysis: '你的Ni主导让你有一种近乎直觉的洞察力——你能在纷繁复杂的表象下看到深层趋势，在别人还在讨论"发生了什么"的时候，你已经看到了"接下来会发生什么"。张良在鸿门宴前夜通过项伯为刘邦铺路，在下邑之谋中提出联合英布、彭越、韩信的战略，这些都是Ni的杰作：从混沌中提炼出清晰的路径。\n\n你的辅助功能Te让你不仅有远见，还能把远见变成可执行的方案。但你的第三功能Fi让你内心其实有自己的价值标准——张良选择功成身退，不是因为怕死，而是因为他的Fi告诉他"这不是我想要的生活"。\n\n你的困难在于：Se在劣势位置，你可能对现实的感官体验不够敏感，容易活在头脑里。你可能不太擅长即兴应对突发状况，在需要"活在当下"的场合会感到不自在。同时，你的Fe是最后的阴影功能，在需要协调人际关系、照顾他人情绪的场合，你可能会选择回避。\n\n迈向更高层次：练习Se——去运动、去旅行、去感受身体和感官带来的直接体验。不要让Ni把你困在"未来的蓝图"里。同时，试着接纳自己的Fi需求——你不是一台思考机器，你也有权利追求让自己内心安宁的生活。',
+  },
+  {
+    name: '李白', mbti: 'ENTP', image: 'libai',
+    keywords: '天生狂放 · 点子大王 · 不受约束的灵魂',
+    functions: ['Ne', 'Ti', 'Fe', 'Si', 'Se', 'Ni', 'Te', 'Fi'],
+    life: '李白，一个"以我为主，唯我独尊"的人。他少年学剑，二十多岁"仗剑去国，辞亲远游"，一生都在路上。他写诗"黄河之水天上来"，他说"天子呼来不上船"，他让高力士脱靴、杨国忠磨墨。他一生想当官，但真当了官又受不了规矩，干了不到两年就被"赐金放还"。安史之乱中他投了永王李璘，结果永王兵败，他被流放夜郎，半路遇赦。晚年穷困潦倒，投奔族叔李阳冰，死在那里。有人说他醉后入水捉月而死——这个结局很李白。',
+    analysis: '你的Ne主导让你脑子里永远有一万个想法在飞。你看到任何东西都能联想到别的东西，你的思维像烟花一样四处绽放。李白的诗之所以千古流传，正是因为他的Ne能在一瞬间把天上地下、古往今来的意象全部打碎重组——"君不见黄河之水天上来，奔流到海不复回"——这是Ne的爆炸式输出。\n\n你的辅助功能Ti让你不仅有想法，还有逻辑。李白的诗歌在狂放的表面下，其实有着精密的格律和结构。你的第三功能Fe让你对人有一种天真的热情——李白一生交友无数，杜甫、贺知章、汪伦，他都真心相待。但你的Fe也让他在政治上天真得像个孩子，投永王就是一个Fe驱动的错误判断。\n\n你的困难在于：Si在第四位置，意味着你对稳定、持续、按部就班的生活有一种本能的抗拒。你可能很难在一个地方待很久，很难对一件事保持长期的专注。李白一生漂泊，某种程度上是他的Ne+Si劣势组合的体现——他需要新鲜感，但对"坚持"这件事感到困难。\n\n迈向更高层次：发展你的Ti，让自己的想法不只是"多"，还要"深"。同时，有意识地练习Si——建立一些小的日常习惯，学会在重复中找到意义，而不是永远追逐下一个新鲜刺激。',
+  },
+  {
+    name: '庄子', mbti: 'INTP', image: 'zhuangzi',
+    keywords: '逍遥哲人 · 逻辑的游戏者 · 拒绝入局的旁观者',
+    functions: ['Ti', 'Ne', 'Si', 'Fe', 'Ni', 'Se', 'Te', 'Fi'],
+    life: '庄子，宋国蒙人，做过漆园吏——一个管漆树园的小官。楚威王听说他有才，派人带着重金请他做宰相，庄子说："你见过祭祀用的牛吗？养了好几年，披着锦绣，牵进太庙。到那时候，它想当一头没人管的小猪，还来得及吗？"他把功名利禄看透了。他一生穷困，住在穷闾陋巷，靠编草鞋为生，但精神世界极其丰富。他和惠施在濠梁上辩论"鱼之乐"，他梦见蝴蝶分不清自己是庄周还是蝴蝶。他老婆死了，他鼓盆而歌，说"她回到天地之间了，我为什么要哭"。',
+    analysis: '你的Ti主导让你有一种对"精确"的执念——你追求的是逻辑的自洽，而不是外界的认可。庄子的"齐物论"本质上是一个Ti的杰作：他要把所有的矛盾、对立、是非，全部用逻辑消解掉。"彼亦一是非，此亦一是非"——这不就是Ti在拆解一切预设前提吗？\n\n你的辅助功能Ne让你思维极度发散。庄子的想象力是爆炸性的：大鹏展翅九万里、蜗牛角上的两国大战、骷髅和他对话——这些都是Ne的产物。你能在任何一个概念上展开无尽的联想，这让你的思维既深邃又有趣。\n\n你的困难在于：Fe在第三位置，你对人际关系的需求是矛盾的。你渴望被理解（Ne需要交流），但你又受不了社交的虚伪和琐碎。庄子只有一个真正的朋友惠施，惠施死后他说"吾无以为质矣"——没有可以说话的人了。你可能也有类似的孤独感：你的想法太超前，能跟上你的人太少。\n\n迈向更高层次：发展你的Si，把散落的灵感沉淀为系统的知识。同时，接纳自己的Fe——不是所有人都需要"懂"你，但你可以学会在浅层社交中也找到一些温暖。',
+  },
+  {
+    name: '孔子', mbti: 'ENFJ', image: 'kongzi',
+    keywords: '万世师表 · 温暖的理想主义者 · 秩序的编织者',
+    functions: ['Fe', 'Ni', 'Se', 'Ti', 'Ne', 'Fi', 'Si', 'Te'],
+    life: '孔子，一个"知其不可而为之"的人。他出身没落贵族，三岁丧父，少年贫贱。他一生想恢复周礼，周游列国十四年，见过各种国君，没有一个真正用他。他在陈蔡之间被围困，粮食断绝，弟子们饿得站不起来，他还在弹琴唱歌。子路气冲冲地问："君子亦有穷乎？"他说："君子固穷，小人穷斯滥矣。"他晚年回到鲁国，整理六经，教了三千弟子。他说"己所不欲，勿施于人"，说"三人行必有我师"，说"朝闻道夕死可矣"。',
+    analysis: '你的Fe主导让你天然关注"人"——人的感受、人的关系、人应该怎样相处。孔子的核心思想"仁"，本质上就是一个Fe的概念：人与人之间的恰当关系。他讲的"孝""悌""忠""恕"，全都是关于如何在关系中做一个好人。\n\n你的辅助功能Ni给了你一个宏大的愿景——孔子不是简单地教人守规矩，他有一个终极目标：建立一个"天下大同"的理想社会。你的第三功能Se让你有能力把理念落到实践中——孔子不是一个空谈家，他做过官、打过仗、管理过粮仓。\n\n你的困难在于：Ti在第四位置，你可能会在需要客观分析、就事论事的场合感到不适。孔子说"父为子隐，子为父隐"，这在Ti看来是不合逻辑的，但Fe的逻辑是关系优先。你可能也会在"讲道理"和"顾人情"之间挣扎。同时，你的Si在第六位置，意味着你可能不擅长处理繁琐的细节和重复性的工作。\n\n迈向更高层次：练习Ti——学会在适当的时候放下"关系"，用纯粹的理性来分析问题。同时，发展你的Se——多接触具体的事物，不要只活在理念的世界里。',
+  },
+  {
+    name: '屈原', mbti: 'INFJ', image: 'quyuan',
+    keywords: '悲剧的理想主义者 · 孤独的醒者 · 用生命写诗的人',
+    functions: ['Ni', 'Fe', 'Ti', 'Se', 'Fi', 'Ne', 'Si', 'Te'],
+    life: '屈原，楚国贵族，二十多岁就当上左徒，"入则与王图议国事，以出号令；出则接遇宾客，应对诸侯"。他想变法图强，但触动了旧贵族的利益，被上官大夫谗害，怀王疏远了他。他写《离骚》，写"长太息以掩涕兮，哀民生之多艰"。顷襄王时他被流放到江南，在沅水、湘水之间漂泊。公元前278年，秦将白起攻破郢都，屈原在汨罗江边写下《怀沙》，然后抱石投江。他死的时候大约六十二岁。',
+    analysis: '你的Ni主导让你能看透很多事情的本质——屈原很早就看到了楚国的危机，看到了旧贵族的腐朽，看到了秦国的威胁。但他看到的东西，别人看不到。他的孤独不是因为没有人陪，而是因为没有人"懂"。\n\n你的辅助功能Fe让你把这种洞察转化为对国家和人民的深切关怀。屈原的爱国不是抽象的口号，而是一种浸透在血液里的情感——"哀民生之多艰"。你的第三功能Ti给了你一种内省和批判的能力——屈原的诗歌里有大量对自我、对命运、对天地的追问。\n\n你的困难在于：Se在劣势位置，你可能对现实的感官世界有一种疏离感。屈原最终选择了死亡，这在心理学的意义上，是Se的彻底崩溃——当外在世界完全无法承载内在的Ni愿景时，身体本身也失去了存在的意义。你可能也会有类似的体验：当理想与现实之间的鸿沟太大时，你会感到一种存在性的绝望。\n\n迈向更高层次：发展你的Se——哪怕是散步、做饭、听音乐，让自己回到身体的感受中。同时，练习Fi——在Ni和Fe之间，你需要一个属于自己的价值锚点，让你不必把全部自我都寄托在外界的回应上。',
+  },
+  {
+    name: '曾国藩', mbti: 'ESTJ', image: 'zengguofan',
+    keywords: '中兴名臣 · 笨功夫的大师 · 在矛盾中修行的人',
+    functions: ['Te', 'Si', 'Ne', 'Fi', 'Se', 'Ti', 'Fe', 'Ni'],
+    life: '曾国藩，湖南湘乡人，出身普通耕读家庭。他考了七次才中秀才，但中了之后一路顺遂，十年七迁，做到礼部侍郎。太平天国起义后，他在家乡办团练，创建湘军。他打仗的办法很"笨"——"结硬寨，打呆仗"，每到一处就先挖壕沟、筑墙，把敌人围死。他一生写了上千封家书，反复叮嘱弟弟们"读书以训诂为本，作诗文以声调为本，事亲以得欢心为本"。他晚年处理天津教案，被骂"卖国贼"，一年后郁郁而终。',
+    analysis: '你的Te主导让你天生就是一个"做事的人"。你不喜欢空谈，你喜欢看到结果。曾国藩的"结硬寨，打呆仗"就是Te的极致体现：不追求奇谋巧计，只追求最可靠的执行方案。你的辅助功能Si让你重视经验和传统——曾国藩一生强调"守拙"，他认为最笨的办法往往最有效，因为笨办法经过了时间的检验。\n\n你的第三功能Ne让你有一定的灵活性——曾国藩虽然保守，但他也懂得变通，比如他支持洋务运动、派人出国留学。但你的Ne始终是第三位的，你不会像Ne主导的人那样天马行空，你更倾向于在已有的框架内做有限的创新。\n\n你的困难在于：Fi在第四位置，你可能会忽视自己内心深处的情感需求。曾国藩一生都在"修身"，但他的修身更像是一种自我规训，而不是自我接纳。他晚年处理天津教案时的痛苦，很大程度上来自于他的Fi（"这样做对不对？"）与Te（"这样做最有效"）之间的冲突。你可能也会在"应该做"和"想做"之间感到撕裂。\n\n迈向更高层次：练习Fi——不是所有事情都要"有用"，有些事只是因为"我在乎"。给自己一些不需要理由的快乐。',
+  },
+  {
+    name: '司马懿', mbti: 'ISTJ', image: 'simayi',
+    keywords: '隐忍大师 · 时间的猎人 · 不动声色的棋手',
+    functions: ['Si', 'Te', 'Fi', 'Ne', 'Se', 'Ti', 'Fe', 'Ni'],
+    life: '司马懿，河内温县人，出身世家。曹操征召他，他装病不去，被逼急了才出仕。他在曹魏四代君主手下做事，从文学掾做到太傅。他最大的本事是"等"：等曹操死、等曹丕死、等曹叡死、等曹爽放松警惕。公元249年，七十岁的司马懿趁曹爽陪皇帝出城扫墓，发动高平陵之变，一举夺取政权。他一生几乎没打过败仗，但最著名的一战不是打赢的——是对阵诸葛亮时坚守不出，活活把诸葛亮耗死。他说"吾事魏历年，官授太傅，人臣之位极矣"——嘴上这么说，手上一点没闲着。',
+    analysis: '你的Si主导让你有一种超乎常人的耐心和记忆力。司马懿能记住几十年来每一个对手的弱点、每一场战役的细节、每一个盟友的立场变化。他的"等"不是被动的等待，而是主动的积累——他在Si的数据库里不断存入信息，等到需要的时候一次性调用。\n\n你的辅助功能Te让你不仅有信息，还有行动力。司马懿发动高平陵之变时，一天之内就控制了洛阳城，这种执行力是Te的典型表现。你的第三功能Fi让你有自己内在的忠诚标准——司马懿对曹魏的"忠诚"是有条件的，当条件不满足时，他的Fi就不再约束他。\n\n你的困难在于：Ne在第四位置，你可能对变化和不确定性有天然的抗拒。你需要时间去消化新事物，面对突然的变故时，你的第一反应可能是"先稳住"。同时，你的Fe在第七位置，在需要表达情感、建立深度人际连接的场合，你可能会显得冷淡或疏离。司马懿一生朋友不多，他的世界是一个人的棋局。\n\n迈向更高层次：练习Ne——试着对新事物保持开放，哪怕只是学一门新技能、读一本不同类型的书。同时，发展你的Fi——你的隐忍和忠诚是珍贵的品质，但也要学会对自己温柔。',
+  },
+  {
+    name: '刘备', mbti: 'ESFJ', image: 'liubei',
+    keywords: '仁德之主 · 人际天才 · 用情感凝聚一切的人',
+    functions: ['Fe', 'Si', 'Ne', 'Ti', 'Se', 'Fi', 'Ni', 'Te'],
+    life: '刘备，涿郡人，自称中山靖王之后，但到他这一代已经靠织席贩履为生。他一生颠沛流离，投过公孙瓒、陶谦、曹操、袁绍、刘表，四十多岁还没有自己的地盘。但他走到哪里都有人愿意跟他：关羽、张飞在涿郡就跟着他，赵云从公孙瓒那里投奔他，诸葛亮被他三顾茅庐请出来。他摔阿斗、携民渡江、白帝城托孤。临终对诸葛亮说："若嗣子可辅，辅之；如其不才，君可自取。"有人说他虚伪，但一个人能"虚伪"一辈子，那就是真的了。',
+    analysis: '你的Fe主导让你有一种天然的人际吸引力。刘备不是最能打的，不是最聪明的，也不是出身最好的，但他能让最厉害的人心甘情愿地跟着他。因为他真正在意别人的感受——他知道关羽骄傲，所以给他足够的尊重；他知道诸葛亮谨慎，所以给他全部的信任。\n\n你的辅助功能Si让你重视传统的道义和承诺。刘备一生以"汉室宗亲"的身份自居，这既是一个政治标签，也是他的Si在起作用：他需要一个"正统"的框架来安放自己的行为。你的第三功能Ne让你有一定的灵活性——刘备并不是死守规矩的人，他懂得在适当的时候变通。\n\n你的困难在于：Ti在第四位置，你在需要理性分析、冷酷决策的场合可能会犹豫。刘备伐吴为关羽报仇，从Ti的角度看是极其不理智的，但从Fe的角度看，这是他作为一个"重情义的人"必然会做的选择。你可能也会在"理性"和"情感"之间反复纠结。\n\n迈向更高层次：练习Ti——学会在做决定时暂时放下"别人会怎么想"，纯粹从逻辑出发分析利弊。同时，发展你的Fi——在照顾所有人之前，先问问自己"我想要什么"。',
+  },
+  {
+    name: '张衡', mbti: 'ISFJ', image: 'zhangheng',
+    keywords: '从容淡静的发明家 · 在细节中见伟大的人 · 温和的坚守者',
+    functions: ['Si', 'Fe', 'Ti', 'Ne', 'Se', 'Fi', 'Te', 'Ni'],
+    life: '张衡，南阳西鄂人，"少善属文"，但"从容淡静，不好交接俗人"。大将军邓骘多次召他，他不去。他在太学读书，"通五经，贯六艺"，但最感兴趣的却是天文、阴阳、历算。他发明了地动仪——铜壶形，里面有机关，哪个方向发生地震，对应方向的龙口就会吐出一颗铜丸，掉进蛤蟆嘴里。他还造了浑天仪、指南车、计里鼓车。他写《二京赋》，花了十年时间。他做过太史令、侍中、河间相，在地方上惩治豪强，手段果决。但他晚年"郁郁不得志"，写了《归田赋》想归隐。',
+    analysis: '你的Si主导让你对细节有一种近乎执迷的关注。张衡能在地动仪上做到"哪个方向的地震对应哪个方向的龙"，这种精确性正是Si的杰作——他不仅记住了大量的天文观测数据，还能从数据中找出规律。\n\n你的辅助功能Fe让你不仅关注"物"，也关注"人"。张衡在地方做官时"治威严，整法度"，但他不是冷酷的执法者，他"阴知奸党名姓，一时收禽"，背后是对百姓的保护。你的第三功能Ti给了你一种理论建构的能力——张衡不是一个单纯的工匠，他同时是一个理论家，他的《灵宪》是中国古代天文学的奠基之作。\n\n你的困难在于：Ne在第四位置，你可能对"未知"和"变化"有一种隐约的不安。张衡虽然是一个伟大的发明家，但他的创新始终在一个相对稳定的框架内——他改进的是已有的技术，而不是颠覆性的革命。你可能也会在面对需要"打破常规"的场合感到犹豫。同时，你的Te在第七位置，你可能不擅长在竞争中争取自己的利益。\n\n迈向更高层次：练习Ne——试着拥抱不确定性，把"我不知道"当作一个有趣的开始而不是威胁。同时，发展你的Te——学会在必要时为自己发声，争取应得的认可。',
+  },
+  {
+    name: '曹操', mbti: 'ESTP', image: 'caocao',
+    keywords: '乱世奸雄 · 行动派 · 在混乱中游刃有余的人',
+    functions: ['Se', 'Ti', 'Fe', 'Ni', 'Te', 'Si', 'Ne', 'Fi'],
+    life: '曹操，沛国谯县人，父亲曹嵩是宦官曹腾的养子。他年轻时任侠放荡，"好飞鹰走狗"，但桥玄一见他就说"天下将乱，非命世之才不能济也，能安之者，其在君乎"。他起兵讨董卓，迎汉献帝到许都，"挟天子以令诸侯"。他打了无数仗：官渡之战以少胜多打败袁绍，赤壁之战被孙刘联军打败，潼关之战打败马超，汉中之战被刘备打败。他写诗"对酒当歌，人生几何"，写"老骥伏枥，志在千里"。他杀孔融、杀杨修、杀华佗，但临终遗令说"分香卖履"——把剩下的香料分给妻妾，让她们学着做鞋卖钱。',
+    analysis: '你的Se主导让你对现实有一种敏锐的嗅觉。曹操能在乱世中崛起，靠的是对局势的即时判断——什么时候该打，什么时候该跑，什么时候该拉拢，什么时候该翻脸。他的决策速度极快，因为他相信自己的直觉。\n\n你的辅助功能Ti让你不只是靠直觉行动，还有一套自己的逻辑。曹操的"唯才是举"就是一个Ti驱动的用人策略——不管你的品德如何，只要有才就用。这在Fe看来是离经叛道的，但Ti的逻辑是：在乱世中，能力比道德更重要。\n\n你的第三功能Fe让你有能力在需要的时候"表演"情感——曹操哭典韦、哭郭嘉，有些是真的，有些是给活人看的。但你的Fe是第三位的，你不会像Fe主导的人那样把关系放在第一位。你的困难在于：Fi在最后位置，你可能会忽视自己内心最深处的情感需求。曹操临终的"分香卖履"之所以感人，正是因为它罕见地暴露了他的Fi——一个一辈子杀伐决断的人，最后惦记的是让妻妾们有个谋生的手段。\n\n迈向更高层次：练习Fi——问问自己"我到底在乎什么"，而不只是"现在该做什么"。发展你的Ni——在做决定之前多想一想长期后果，而不是只盯着眼前。',
+  },
+  {
+    name: '韩信', mbti: 'ISTP', image: 'hanxin',
+    keywords: '兵仙 · 技术天才 · 在战场上无敌在生活中天真的人',
+    functions: ['Ti', 'Se', 'Ni', 'Fe', 'Si', 'Te', 'Ne', 'Fi'],
+    life: '韩信，淮阴人，年轻时穷困潦倒，在亭长家蹭饭被嫌弃，在河边钓鱼靠漂母施舍。他受过胯下之辱——一个屠夫说"你要么刺我，要么从我胯下钻过去"，他钻了。后来他投奔项羽，不受重用；投奔刘邦，差点被砍头，喊了一声"上不欲就天下乎？何为斩壮士！"被夏侯婴救了。萧何月下追韩信，刘邦设坛拜将。此后他破魏、代、赵、齐，在潍水之战中水淹龙且，在垓下设十面埋伏逼死项羽。但他在政治上极其天真，刘邦夺他的兵权他毫无办法，最后被吕后杀于长乐宫。',
+    analysis: '你的Ti主导让你有一种对"最优解"的执着。韩信打仗的每一个决策都是精密计算的结果——背水一战、声东击西、半渡而击，这些战术不是凭感觉打出来的，是Ti在大量信息中找到了唯一的正确答案。你的辅助功能Se让你能把Ti的分析即时转化为行动。韩信在战场上从不犹豫，因为他的Se在实时捕捉信息，他的Ti在实时计算——这两个功能配合得天衣无缝。\n\n你的困难在于：Fe在第四位置，你对人际关系的理解可能过于简单。韩信对刘邦说"陛下不能将兵，而善将将"，这句话说得很对，但他说这话的方式暴露了他对权力关系的天真。他认为自己只要有用，就不会被抛弃。但Fe的逻辑不是"有用就行"，Fe的逻辑是"关系需要维护"。你可能也有类似的问题：在专业领域里如鱼得水，但在人际关系的复杂性面前感到困惑。\n\n迈向更高层次：发展你的Fe——学会读懂人情世故不是"虚伪"，而是一种必要的社会技能。同时，练习你的Ni——在行动之前多想一想"这件事背后意味着什么"。',
+  },
+  {
+    name: '项羽', mbti: 'ESFP', image: 'xiangyu',
+    keywords: '西楚霸王 · 性情中人 · 在巅峰与深渊之间摇摆的人',
+    functions: ['Se', 'Fi', 'Te', 'Ni', 'Fe', 'Si', 'Ne', 'Ti'],
+    life: '项羽，下相人，楚国名将项燕之孙。他二十四岁起兵，二十七岁在巨鹿之战中破釜沉舟大败秦军，成为诸侯上将军。他进了咸阳，杀了秦王子婴，烧了阿房宫。他说"富贵不归故乡，如衣绣夜行"。他在鸿门宴上放走了刘邦，在荥阳之战中射伤了刘邦，在垓下被十面埋伏，四面楚歌。他在军帐中对着虞姬唱"力拔山兮气盖世，时不利兮骓不逝"，虞姬自刎。他带八百骑突围，最后在乌江边自刎，年仅三十一岁。他说"天亡我，非战之罪也"。',
+    analysis: '你的Se主导让你活在一个充满激情和行动的世界里。项羽的一生是Se的极致展现：他打仗靠的是对战场局势的即时感知，他做决定靠的是当下的情感冲动。巨鹿之战破釜沉舟，是他Se能量的爆发——不计后果，全力以赴，用行动而不是言语来证明一切。\n\n你的辅助功能Fi让你对"自己是谁"有一种强烈的意识。项羽不是一个冷血的权力机器，他有自己的情感和骄傲。鸿门宴上放走刘邦，不是一个战略失误，而是Fi的选择——他不愿意在饭桌上杀人。但Fi的代价是：你可能会因为坚持自己的感受而错过理性的最优解。\n\n你的困难在于：Ni在第四位置，你可能会忽视长远的后果。项羽进了咸阳不建都，非要回彭城，因为"富贵不归故乡如衣绣夜行"——这是Se+Fi的组合，追求即时的满足和情感上的归属，而非长远的战略。你可能也会在"我就是要这样"和"这样对我不好"之间反复挣扎。\n\n迈向更高层次：练习Ni——在做重大决定之前，问自己"五年后我回头看这件事，会怎么想"。同时，发展你的Te——有时候，效率比感受更重要。',
+  },
+  {
+    name: '陶渊明', mbti: 'ISFP', image: 'taoyuanming',
+    keywords: '田园诗人 · 不为五斗米折腰 · 在平凡中找到自由的人',
+    functions: ['Fi', 'Se', 'Ni', 'Te', 'Si', 'Ne', 'Fe', 'Ti'],
+    life: '陶渊明，浔阳柴桑人，曾祖是东晋开国元勋陶侃。他年轻时也想过"猛志逸四海"，但做了几次官都做不长。最后一次做彭泽令，上级派督邮来检查，手下说"应束带见之"，他说"吾不能为五斗米折腰，拳拳事乡里小人邪"，当天就解印去职。此后他归隐田园，种豆南山下，草盛豆苗稀。他穷到"夏日长抱饥，寒夜无被眠"，但拒绝了所有请他出仕的邀请。他写《桃花源记》，写"采菊东篱下，悠然见南山"，写"死去何所道，托体同山阿"。',
+    analysis: '你的Fi主导让你对"真实"有一种执着的追求。陶渊明辞官不是因为怕累，不是因为官场黑暗——这些理由别人也有，但他们忍了。陶渊明忍不了，因为他的Fi不允许他做"违心"的事。他的判断标准不是"这样做对我有利吗"，而是"这样做对得起自己吗"。\n\n你的辅助功能Se让你能在简单的生活中找到美。陶渊明的田园诗之所以动人，是因为他真的在种地、真的在看菊花、真的在感受四季的变化。他的Se不是追求刺激的Se，而是安静地活在当下的Se。你的第三功能Ni让你有一种超越性的视角——陶渊明不只是一个农民，他是在用整个生命思考"人应该怎么活"。\n\n你的困难在于：Te在第四位置，你在需要组织、规划、执行复杂任务的场合可能会感到吃力。陶渊明种地种得不太好，"草盛豆苗稀"就是证据。你可能也会在"想做"和"需要做"之间感到矛盾。同时，你的Fe在第七位置，在需要社交和人际协调的场合，你可能会选择退缩。\n\n迈向更高层次：练习Te——学会把想法变成计划，把计划变成行动。同时，发展你的Fe——独处是好的，但人也需要连接。找到那些不需要你"违心"就能相处的人。',
+  },
+  {
+    name: '杜甫', mbti: 'INFP', image: 'dufu',
+    keywords: '诗圣 · 悲天悯人的记录者 · 在苦难中坚守信念的人',
+    functions: ['Fi', 'Ne', 'Si', 'Te', 'Fe', 'Ni', 'Se', 'Ti'],
+    life: '杜甫，襄阳人，出身"奉儒守官"的家庭。他年轻时有"放荡齐赵间，裘马颇清狂"的日子，和李白一起游历，和高适一起登台。但四十岁之后，他的生活急转直下。安史之乱中他被叛军俘虏，逃出来后投奔肃宗，做了左拾遗，又因为替房琯说话被贬。他后半生漂泊在秦州、成都、夔州、潭州之间，靠朋友接济为生。他最小的儿子饿死了，他写"所愧为人父，无食致夭折"。他住茅屋被秋风吹破，写"安得广厦千万间，大庇天下寒士俱欢颜"。他死在从潭州到岳阳的一条小船上。',
+    analysis: '你的Fi主导让你对"对错"有一种深刻的感知。杜甫的"忠"不是对某个皇帝的忠，而是对"仁义"的忠——当他觉得房琯是冤枉的，他就站出来说话，哪怕丢官。他的Fi是他的道德罗盘，指引他在乱世中不迷失方向。\n\n你的辅助功能Ne让你能从个人的苦难中看到更大的图景。杜甫不只是在写自己的悲惨，他在写"朱门酒肉臭，路有冻死骨"，写"三吏""三别"——他的Ne把一个个具体的故事连接成了时代的画卷。你的第三功能Si让你对细节有一种惊人的记忆力——杜甫的诗被称为"诗史"，因为他把安史之乱中的每一个细节都写进去了。\n\n你的困难在于：Te在第四位置，你在需要组织资源、解决实际问题的场合可能会感到无力。杜甫一生穷困，很大程度上是因为他不擅长"经营"自己的生活。你可能也会在理想与现实之间感到巨大的落差。你的Fe在第五位置，你对他人的共情很深，但你不太擅长把这种共情转化为实际的社交行动。\n\n迈向更高层次：发展你的Te——学会把关怀变成行动，把想法变成方案。同时，练习Si的正面面——不是沉溺于过去的伤痛，而是从过去的经验中提炼出让你更强大的智慧。',
+  },
+  {
+    name: '苏东坡', mbti: 'ENFP', image: 'sudongpo',
+    keywords: '无可救药的乐天派 · 跨界天才 · 在流放中活出精彩的人',
+    functions: ['Ne', 'Fi', 'Te', 'Si', 'Fe', 'Ni', 'Se', 'Ti'],
+    life: '苏东坡，眉州人，二十一岁中进士，主考官欧阳修看了他的文章说"老夫当避路，放他出一头地"。他一生大起大落：因"乌台诗案"被贬黄州，在那里写了《赤壁赋》，发明了东坡肉；被召回朝廷做了翰林学士，又因得罪旧党被贬惠州，写"日啖荔枝三百颗，不辞长作岭南人"；再被贬到儋州（海南），在那里教书育人，写"九死南荒吾不恨，兹游奇绝冠平生"。他修苏堤、抗洪水、赈灾民、开药方。他临终前说"吾生无恶，死必不坠"。',
+    analysis: '你的Ne主导让你对世界有一种永不枯竭的好奇心。苏东坡是一个"什么都会"的人：诗、词、文、书、画、美食、医药、水利、教育。他的Ne在每一个领域都能发现新的可能性——被贬黄州就研究怎么做红烧肉，被贬惠州就研究荔枝，被贬海南就研究怎么教书。他的大脑永远在运转，永远在寻找下一个有趣的东西。\n\n你的辅助功能Fi让你在所有的探索背后有一个核心——对"真"的追求。苏东坡的乐观不是傻乐，而是一种深刻的选择：他看到了世界的荒谬和残酷，但他选择以善意和幽默回应。你的第三功能Te让你不仅能想，还能做——苏东坡修苏堤、抗洪水，都是实打实的政绩。\n\n你的困难在于：Si在第四位置，你可能对"坚持"和"重复"感到困难。苏东坡一生漂泊，某种程度上是因为他的Ne+Si组合——他需要新鲜感，但缺乏在一个地方深耕的耐心。同时，你的Fi有时会让你过于理想化，苏东坡在政治上两边不讨好，就是因为他的Fi标准太高，不愿妥协。\n\n迈向更高层次：发展你的Te——把发散的想法聚焦成可执行的计划。同时，练习Si——在"探索新事物"和"坚持一件事"之间找到平衡。',
+  },
+];
+
+function calculateJungianHistory(answers, contentItems, rules) {
+  const questions = getScoredQuestions(contentItems);
+  const optionScores = buildOptionScoreMap(contentItems);
+
+  const funcCounts = { Se: 0, Si: 0, Ne: 0, Ni: 0, Te: 0, Ti: 0, Fe: 0, Fi: 0 };
+  let answeredCount = 0;
+
+  for (const q of questions) {
+    const ans = answers[q.id];
+    if (!ans || typeof ans !== 'string') continue;
+    const score = optionScores.get(ans);
+    if (score && score >= 1 && score <= 8) {
+      const funcName = JUNGIAN_FUNCTIONS[score - 1];
+      funcCounts[funcName]++;
+      answeredCount++;
+    }
+  }
+
+  const sortedFuncs = Object.entries(funcCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([func, count]) => ({ func, count }));
+
+  let bestMatch = null;
+  let bestSimilarity = -1;
+  let secondMatch = null;
+  let secondSimilarity = -1;
+
+  for (const type of HISTORY_TYPES) {
+    const userTop4 = sortedFuncs.slice(0, 4).map(f => f.func);
+    const typeTop4 = type.functions.slice(0, 4);
+    let matchCount = 0;
+    for (let i = 0; i < 4; i++) {
+      if (userTop4[i] === typeTop4[i]) matchCount++;
+    }
+    const similarity = Math.round((matchCount / 4) * 100);
+
+    if (similarity > bestSimilarity) {
+      secondSimilarity = bestSimilarity;
+      secondMatch = bestMatch;
+      bestSimilarity = similarity;
+      bestMatch = type;
+    } else if (similarity > secondSimilarity) {
+      secondSimilarity = similarity;
+      secondMatch = type;
+    }
+  }
+
+  const main = bestMatch || HISTORY_TYPES[0];
+  const sub = secondMatch;
+  const similarity = bestSimilarity;
+  const subSim = secondSimilarity;
+
+  let report = `## 你的历史人格：${main.name}\n\n`;
+  report += `![${main.name}](/assets/images/history/${main.image}.jpg)\n\n`;
+  report += `### ${main.mbti} · ${main.keywords}\n\n`;
+  report += `**相似度：${similarity}%**\n\n`;
+  report += `---\n\n`;
+
+  report += `### 八维功能排序\n\n`;
+  report += `| 排名 | 功能 | 名称 | 得票 | 特征 |\n`;
+  report += `|:---:|:---:|:---|:---:|:---|\n`;
+  for (let i = 0; i < sortedFuncs.length; i++) {
+    const f = sortedFuncs[i];
+    const isTop4 = i < 4;
+    const marker = isTop4 ? ' **← 核心**' : '';
+    report += `| ${i + 1} | ${f.func} | ${FUNC_NAMES[f.func]} | ${f.count} | ${FUNC_DESCS[f.func]}${marker} |\n`;
+  }
+  report += `\n`;
+
+  report += `### 八维功能雷达图\n\n`;
+  report += generateRadarChartSVG(funcCounts);
+  report += `\n`;
+
+  report += `---\n\n`;
+  report += `### 人物生平\n\n`;
+  report += `<div style="font-size: 1.15em; font-weight: bold; font-style: italic; line-height: 1.8; color: #F5D547; text-shadow: 0 0 3px rgba(245, 213, 71, 0.6), 0 0 6px rgba(245, 213, 71, 0.3);">${main.life}</div>\n\n`;
+
+  report += `### 专业心理分析\n\n${main.analysis}\n\n`;
+
+  if (sub && subSim >= 50) {
+    report += `---\n\n`;
+    report += `### 你的副类型：${sub.name}\n\n`;
+    report += `![${sub.name}](/assets/images/history/${sub.image}.jpg)\n\n`;
+    report += `**${sub.mbti} · ${sub.keywords}** · 相似度 ${subSim}%\n\n`;
+    report += `<div style="font-size: 1.1em; font-weight: bold; font-style: italic; line-height: 1.8; color: #F5D547; text-shadow: 0 0 3px rgba(245, 213, 71, 0.5);">${sub.life}</div>\n\n`;
+    report += `#### 副类型心理分析\n\n${sub.analysis}\n\n`;
+  }
+
+  report += `---\n\n`;
+  report += `> 以上相似度基于标准功能排序的前四位匹配度计算。每个人的八维排序都是独特的，类型只是一个参考框架，真正的你比任何类型都更丰富。`;
+
+  return report;
+}
+
+function generateRadarChartSVG(funcCounts) {
+  const labels = JUNGIAN_FUNCTIONS;
+  const values = labels.map(f => funcCounts[f] || 0);
+  const maxVal = Math.max(...values, 4);
+  const cx = 150, cy = 150, r = 110;
+  const n = labels.length;
+
+  const points = labels.map((label, i) => {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const val = values[i];
+    const dist = (val / maxVal) * r;
+    return {
+      x: cx + Math.cos(angle) * dist,
+      y: cy + Math.sin(angle) * dist,
+      lx: cx + Math.cos(angle) * (r + 20),
+      ly: cy + Math.sin(angle) * (r + 20),
+      angle,
+      label,
+      val,
+    };
+  });
+
+  const dataPath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + ' Z';
+
+  let gridRings = '';
+  for (let g = 1; g <= 4; g++) {
+    const gr = (r * g) / 4;
+    let ringPts = '';
+    for (let i = 0; i < n; i++) {
+      const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+      ringPts += `${i === 0 ? 'M' : 'L'} ${(cx + Math.cos(angle) * gr).toFixed(1)} ${(cy + Math.sin(angle) * gr).toFixed(1)} `;
+    }
+    gridRings += `<path d="${ringPts}Z" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+  }
+
+  let axisLines = '';
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    axisLines += `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(angle) * r).toFixed(1)}" y2="${(cy + Math.sin(angle) * r).toFixed(1)}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+  }
+
+  let labelElems = '';
+  for (const p of points) {
+    labelElems += `<text x="${p.lx.toFixed(1)}" y="${p.ly.toFixed(1)}" fill="#F5D547" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${p.label}<tspan x="${p.lx.toFixed(1)}" dy="16" fill="rgba(255,255,255,0.6)" font-size="10" font-weight="normal">${p.val}票</tspan></text>`;
+  }
+
+  let dataPoints = '';
+  for (const p of points) {
+    dataPoints += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#F5D547"/>`;
+  }
+
+  return `<div style="text-align:center; margin: 20px 0;"><svg width="320" height="320" viewBox="0 0 300 300" style="max-width:100%;">${gridRings}${axisLines}<path d="${dataPath}" fill="rgba(245,213,71,0.2)" stroke="#F5D547" stroke-width="2"/>${dataPoints}${labelElems}</svg></div>\n`;
+}

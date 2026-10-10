@@ -15,7 +15,7 @@
  * - 统一错误处理（JSON 错误响应）
  */
 
-import { getPublishedScales, getScaleById, getScaleContent } from './notion.js';
+import { getPublishedScales, getScaleById, getScaleContent, notionHeaders, NOTION_BASE_URL } from './notion.js';
 import { generateReport } from './ai.js';
 import { calculateCustomResult } from './scoring.js';
 import { saveResponse, getReport, updateResponseReport } from './db.js';
@@ -83,6 +83,69 @@ function getClientIP(request) {
 }
 
 // ============================================================
+// 每日分享 Token 工具
+// ============================================================
+
+/**
+ * 获取当天日期字符串（YYYY-MM-DD，UTC+8 中国时区）
+ * @returns {string}
+ */
+function getTodayString() {
+  const now = new Date();
+  // 转换为 UTC+8
+  const cnTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const year = cnTime.getUTCFullYear();
+  const month = String(cnTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(cnTime.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 生成指定日期的量表分享 token
+ * 使用 HMAC-SHA256 签名：token = HMAC(secret, date + ":" + scale_id) 的前 16 位 hex
+ * @param {Object} env - 环境变量（读取 DAILY_TOKEN_SECRET）
+ * @param {string} scaleId - 量表 ID
+ * @param {string} dateStr - 日期字符串 YYYY-MM-DD
+ * @returns {Promise<string>}
+ */
+async function generateDailyToken(env, scaleId, dateStr) {
+  const secret = env.DAILY_TOKEN_SECRET || 'moonsheep-daily-token-default-secret';
+  const message = `${dateStr}:${scaleId}`;
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+  const hex = Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  return hex.slice(0, 16);
+}
+
+/**
+ * 验证量表分享 token 是否有效（仅当天有效）
+ * @param {Object} env - 环境变量
+ * @param {string} scaleId - 量表 ID
+ * @param {string} token - 待验证的 token
+ * @returns {Promise<boolean>}
+ */
+async function verifyDailyToken(env, scaleId, token) {
+  if (!token) return false;
+  const today = getTodayString();
+  const expected = await generateDailyToken(env, scaleId, today);
+  return token === expected;
+}
+
+// ============================================================
 // 路由处理函数
 // ============================================================
 
@@ -104,19 +167,39 @@ async function handleHealth(env) {
  */
 async function handleGetScales(env) {
   const scales = await getPublishedScales(env);
+  const today = getTodayString();
+
+  // 为每个量表生成当日分享 token
+  const scalesWithToken = await Promise.all(
+    scales.map(async (scale) => {
+      const token = await generateDailyToken(env, scale.id, today);
+      return { ...scale, daily_token: token };
+    })
+  );
+
   return jsonResponse(env, {
     success: true,
-    scales: scales,
+    scales: scalesWithToken,
   });
 }
 
 /**
  * 获取量表详情
- * GET /api/scale/:id
+ * GET /api/scale/:id?token=xxx
  */
-async function handleGetScale(env, scaleId) {
+async function handleGetScale(env, scaleId, token) {
   if (!scaleId) {
     return jsonResponse(env, { success: false, error: '缺少量表 ID' }, 400);
+  }
+
+  // 验证每日分享 token
+  const tokenValid = await verifyDailyToken(env, scaleId, token);
+  if (!tokenValid) {
+    return jsonResponse(
+      env,
+      { success: false, error: '分享链接已过期或无效，请从首页进入', error_code: 'TOKEN_EXPIRED' },
+      403
+    );
   }
 
   const scale = await getScaleById(env, scaleId);
@@ -261,6 +344,122 @@ async function handleGetReport(env, reportId) {
   });
 }
 
+/**
+ * 管理端：Notion 页面创建代理
+ * POST /api/admin/notion/create-page
+ * Body: { database: "scales|sections|questions|options", properties: {...} }
+ * Header: X-Admin-Key: <ADMIN_API_KEY>
+ */
+async function handleAdminCreatePage(env, request) {
+  // 鉴权
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_API_KEY) {
+    return jsonResponse(env, { success: false, error: '无权访问' }, 401);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse(env, { success: false, error: '请求体不是有效的 JSON' }, 400);
+  }
+
+  const { database, properties } = body;
+  if (!database || !properties) {
+    return jsonResponse(env, { success: false, error: '缺少 database 或 properties 参数' }, 400);
+  }
+
+  // 映射数据库 ID
+  const dbMap = {
+    scales: env.NOTION_SCALES_DB_ID,
+    sections: env.NOTION_SECTIONS_DB_ID,
+    questions: env.NOTION_QUESTIONS_DB_ID,
+    options: env.NOTION_OPTIONS_DB_ID,
+  };
+  const databaseId = dbMap[database];
+  if (!databaseId) {
+    return jsonResponse(env, { success: false, error: '无效的 database 参数' }, 400);
+  }
+
+  // 调用 Notion API
+  try {
+    const resp = await fetch(`${NOTION_BASE_URL}/pages`, {
+      method: 'POST',
+      headers: notionHeaders(env),
+      body: JSON.stringify({
+        parent: { database_id: databaseId },
+        properties: properties,
+      }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      return jsonResponse(env, {
+        success: false,
+        error: data.message || 'Notion API 调用失败',
+        notion_status: resp.status,
+      }, resp.status);
+    }
+
+    return jsonResponse(env, {
+      success: true,
+      page_id: data.id,
+      url: data.url,
+    });
+  } catch (e) {
+    return jsonResponse(env, { success: false, error: 'Notion API 请求失败: ' + e.message }, 502);
+  }
+}
+
+/**
+ * 管理端：Notion 页面更新
+ * PATCH /api/admin/notion/update-page
+ * Body: { page_id: "...", properties: {...} }
+ * Header: X-Admin-Key: <ADMIN_API_KEY>
+ */
+async function handleAdminUpdatePage(env, request) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  if (!adminKey || adminKey !== env.ADMIN_API_KEY) {
+    return jsonResponse(env, { success: false, error: '无权访问' }, 401);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse(env, { success: false, error: '请求体不是有效的 JSON' }, 400);
+  }
+
+  const { page_id, properties } = body;
+  if (!page_id || !properties) {
+    return jsonResponse(env, { success: false, error: '缺少 page_id 或 properties 参数' }, 400);
+  }
+
+  try {
+    const resp = await fetch(`${NOTION_BASE_URL}/pages/${page_id}`, {
+      method: 'PATCH',
+      headers: notionHeaders(env),
+      body: JSON.stringify({ properties }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      return jsonResponse(env, {
+        success: false,
+        error: data.message || 'Notion API 调用失败',
+        notion_status: resp.status,
+      }, resp.status);
+    }
+
+    return jsonResponse(env, {
+      success: true,
+      page_id: data.id,
+    });
+  } catch (e) {
+    return jsonResponse(env, { success: false, error: 'Notion API 请求失败: ' + e.message }, 502);
+  }
+}
+
 // ============================================================
 // 主路由入口
 // ============================================================
@@ -299,12 +498,23 @@ export default {
       // GET /api/scale/:id — 获取量表详情
       const scaleMatch = path.match(/^\/api\/scale\/([^\/]+)$/);
       if (scaleMatch && method === 'GET') {
-        return await handleGetScale(env, scaleMatch[1]);
+        const token = url.searchParams.get('token');
+        return await handleGetScale(env, scaleMatch[1], token);
       }
 
       // POST /api/submit — 提交答题
       if (path === '/api/submit' && method === 'POST') {
         return await handleSubmit(env, request);
+      }
+
+      // POST /api/admin/notion/create-page — 管理端：创建 Notion 页面
+      if (path === '/api/admin/notion/create-page' && method === 'POST') {
+        return await handleAdminCreatePage(env, request);
+      }
+
+      // POST /api/admin/notion/update-page — 管理端：更新 Notion 页面
+      if (path === '/api/admin/notion/update-page' && method === 'POST') {
+        return await handleAdminUpdatePage(env, request);
       }
 
       // GET /api/report/:id — 获取报告
