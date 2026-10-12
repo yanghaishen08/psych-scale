@@ -434,30 +434,140 @@
     }
 
     /**
+     * 找到"最佳关系模式"维度表格并渲染为精美卡片
+     */
+    function renderRelationshipModeCards() {
+        const tables = reportContainer.querySelectorAll('.markdown-body table');
+        let targetTable = null;
+
+        for (const table of tables) {
+            const headers = table.querySelectorAll('thead th');
+            if (headers.length < 2) continue;
+            const headerText = Array.from(headers).map(h => h.textContent.trim()).join('|');
+            // 匹配"最佳关系模式维度表"或包含"层面|维度"且有"描述|说明"的表格
+            if (/层面.*(描述|说明)|(维度|层面).*描述/.test(headerText) && /精神|情感|生活|冲突|边界|成长/.test(table.textContent)) {
+                targetTable = table;
+                break;
+            }
+        }
+
+        if (!targetTable) return false;
+
+        // 提取数据
+        const rows = targetTable.querySelectorAll('tbody tr');
+        const dimensions = [];
+        for (const row of rows) {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 2) {
+                const name = cells[0].textContent.trim();
+                const desc = cells[1].textContent.trim();
+                if (name && desc) dimensions.push({ name, desc });
+            }
+        }
+
+        if (dimensions.length < 3) return false;
+
+        // 图标映射
+        const iconMap = {
+            '精神': '💭', '思维': '💭', '灵魂': '💭',
+            '情感': '💗', '情绪': '💗', '感情': '💗',
+            '生活': '🏠', '日常': '🏠', '居家': '🏠',
+            '冲突': '⚖️', '矛盾': '⚖️', '沟通': '⚖️',
+            '边界': '🔹', '空间': '🔹', '距离': '🔹',
+            '成长': '🌱', '进步': '🌱', '提升': '🌱'
+        };
+
+        function getIcon(name) {
+            for (const [key, icon] of Object.entries(iconMap)) {
+                if (name.includes(key)) return icon;
+            }
+            return '✨';
+        }
+
+        // 找到模块标题（含"最佳关系模式"的h2或h3）
+        let sectionHeading = null;
+        const headings = reportContainer.querySelectorAll('.markdown-body h2, .markdown-body h3');
+        for (const h of headings) {
+            if (/最佳关系模式/.test(h.textContent.trim())) {
+                sectionHeading = h;
+                break;
+            }
+        }
+
+        // 生成卡片HTML
+        const cardsHtml = dimensions.map((d, i) => `
+            <div class="relmode-card">
+                <div class="relmode-icon">${getIcon(d.name)}</div>
+                <div class="relmode-content">
+                    <div class="relmode-name">${escapeHtml(d.name)}</div>
+                    <div class="relmode-desc">${escapeHtml(d.desc)}</div>
+                </div>
+            </div>
+        `).join('');
+
+        const container = document.createElement('div');
+        container.className = 'relmode-container';
+        container.innerHTML = `
+            <div class="relmode-grid">
+                ${cardsHtml}
+            </div>
+        `;
+
+        // 替换原表格
+        targetTable.parentNode.replaceChild(container, targetTable);
+
+        // 同时移除该章节内的 mermaid 流程图代码块（如果有）
+        if (sectionHeading) {
+            let nextHeading = null;
+            let el = sectionHeading.nextElementSibling;
+            while (el) {
+                if (el.tagName && /^H[23]$/.test(el.tagName)) {
+                    nextHeading = el;
+                    break;
+                }
+                el = el.nextElementSibling;
+            }
+
+            let toRemove = [];
+            el = sectionHeading.nextElementSibling;
+            while (el && el !== nextHeading) {
+                if (el.tagName === 'PRE' && /flowchart|graph TD/.test(el.textContent)) {
+                    toRemove.push(el);
+                }
+                el = el.nextElementSibling;
+            }
+            toRemove.forEach(e => e.remove());
+        }
+
+        return true;
+    }
+
+    /**
      * 渲染所有图表
      * 策略：
      * 1. 饼图 → 从代码块解析，渲染辐射仪表盘
-     * 2. 雷达图 → 从维度得分表格提取数据，找到雷达图章节插入SVG，替换原内容
-     * 3. 其他Mermaid图表 → 走Mermaid渲染
+     * 2. 雷达图 → 从维度得分表格提取数据，渲染自定义SVG雷达图（替换第一个雷达mermaid代码块）
+     * 3. 最佳关系模式 → 从维度表格提取数据，渲染精美的响应式卡片
+     * 4. 其他Mermaid图表 → 走Mermaid渲染
      */
     async function renderCharts() {
         try {
-            // ---- 饼图/仪表盘：从代码块渲染 ----
+            // ---- 收集所有代码块并分类 ----
             const allCodeBlocks = reportContainer.querySelectorAll('pre code');
             const pieCharts = [];
+            const radarCodeBlocks = [];
             const mermaidCharts = [];
 
-            const radarCodeBlocks = [];
             allCodeBlocks.forEach((codeBlock) => {
                 const lang = (codeBlock.className || '').replace('language-', '').trim();
                 const text = codeBlock.textContent.trim();
                 const type = lang === 'mermaid' ? detectChartType(text) || 'mermaid' : detectChartType(text);
                 if (type === 'pie') pieCharts.push({ codeBlock, text });
-                else if (type === 'radar') radarCodeBlocks.push({ codeBlock, text }); // 暂存，稍后根据是否有表格决定处理方式
+                else if (type === 'radar') radarCodeBlocks.push({ codeBlock, text });
                 else if (type === 'mermaid') mermaidCharts.push({ codeBlock, text });
             });
 
-            // 渲染饼图（辐射仪表盘）
+            // ---- 1. 渲染饼图（辐射仪表盘） ----
             for (const { codeBlock, text } of pieCharts) {
                 const pre = codeBlock.parentElement;
                 if (!pre || !pre.parentElement) continue;
@@ -468,47 +578,25 @@
                 pre.parentElement.replaceChild(container, pre);
             }
 
-            // ---- 雷达图：优先从表格提取数据渲染自定义SVG；无表格则用mermaid渲染 ----
+            // ---- 2. 雷达图：优先从表格提取数据渲染自定义SVG ----
             const radarData = extractRadarDataFromTable();
-            if (radarData) {
-                const radarHeading = findRadarSection();
-                if (radarHeading) {
-                    // 创建雷达图容器
+            if (radarData && radarCodeBlocks.length > 0) {
+                // 有表格数据 + 有雷达代码块 → 替换第一个代码块为自定义SVG
+                const firstRadar = radarCodeBlocks[0];
+                const pre = firstRadar.codeBlock.parentElement;
+                if (pre && pre.parentElement) {
                     const radarContainer = document.createElement('div');
                     radarContainer.className = 'chart-container radar-chart-container';
                     renderClassicRadarChart(radarData, radarContainer);
-
-                    // 找到雷达图章节的下一个章节标题
-                    let nextHeading = null;
-                    let el = radarHeading.nextElementSibling;
-                    while (el) {
-                        if (el.tagName && /^H[23]$/.test(el.tagName)) {
-                            nextHeading = el;
-                            break;
-                        }
-                        el = el.nextElementSibling;
-                    }
-
-                    // 移除雷达图章节中的图表元素（pre/code块），保留文字描述
-                    let toRemove = [];
-                    el = radarHeading.nextElementSibling;
-                    while (el && el !== nextHeading) {
-                        const tag = el.tagName || '';
-                        // 移除 pre / code 块（ASCII图或Mermaid代码），以及纯空行的p
-                        if (tag === 'PRE') {
-                            toRemove.push(el);
-                        } else if (tag === 'P' && el.textContent.trim().length < 5) {
-                            toRemove.push(el);
-                        }
-                        el = el.nextElementSibling;
-                    }
-                    toRemove.forEach(e => e.remove());
-
-                    // 在标题后插入新雷达图
-                    radarHeading.after(radarContainer);
+                    pre.parentElement.replaceChild(radarContainer, pre);
+                }
+                // 移除剩余的雷达代码块
+                for (let i = 1; i < radarCodeBlocks.length; i++) {
+                    const p = radarCodeBlocks[i].codeBlock.parentElement;
+                    if (p && p.parentElement) p.remove();
                 }
             } else if (radarCodeBlocks.length > 0) {
-                // 无表格数据：将雷达图交由 mermaid 渲染
+                // 无表格数据：交由 mermaid 渲染
                 for (const { codeBlock, text } of radarCodeBlocks) {
                     const pre = codeBlock.parentElement;
                     if (!pre || !pre.parentElement) continue;
@@ -519,7 +607,10 @@
                 }
             }
 
-            // ---- 其他 Mermaid 图表 ----
+            // ---- 3. 最佳关系模式：从表格渲染精美卡片 ----
+            renderRelationshipModeCards();
+
+            // ---- 4. 其他 Mermaid 图表 ----
             for (const { codeBlock, text } of mermaidCharts) {
                 const pre = codeBlock.parentElement;
                 if (!pre || !pre.parentElement) continue;

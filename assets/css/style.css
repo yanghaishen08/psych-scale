@@ -1140,6 +1140,59 @@ a {
     color: #5a6a75;
 }
 
+/* --- 最佳关系模式卡片 --- */
+.relmode-container {
+    margin: 1.6em 0;
+}
+
+.relmode-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+.relmode-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(99, 102, 241, 0.06));
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 14px;
+    padding: 16px 18px;
+    transition: all 0.25s;
+}
+
+.relmode-card:hover {
+    border-color: rgba(139, 92, 246, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15);
+}
+
+.relmode-icon {
+    font-size: 1.6rem;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-top: 2px;
+}
+
+.relmode-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.relmode-name {
+    font-weight: 700;
+    color: var(--primary-color);
+    font-size: 0.98rem;
+    margin-bottom: 4px;
+}
+
+.relmode-desc {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+
 /* 链接 */
 .report-content.markdown-body a {
     color: var(--primary-color);
@@ -1348,7 +1401,7 @@ a {
     }
 
     .report-main-card {
-        padding: 24px 20px;
+        padding: 20px 16px;
     }
 
     .report-title {
@@ -1359,16 +1412,36 @@ a {
         grid-template-columns: 1fr;
     }
 
+    .report-content.markdown-body {
+        font-size: 0.92rem;
+        line-height: 1.85;
+    }
+
     .report-content.markdown-body h1 {
-        font-size: 1.4rem;
+        font-size: 1.35rem;
     }
 
     .report-content.markdown-body h2 {
-        font-size: 1.2rem;
+        font-size: 1.15rem;
+        margin: 1.6em 0 0.6em 0;
+        padding-left: 12px;
     }
 
     .report-content.markdown-body h3 {
-        font-size: 1.05rem;
+        font-size: 1rem;
+    }
+
+    .report-content.markdown-body p {
+        margin-bottom: 1em;
+    }
+
+    .report-content.markdown-body ul,
+    .report-content.markdown-body ol {
+        padding-left: 1.5em;
+    }
+
+    .report-content.markdown-body li {
+        margin-bottom: 0.5em;
     }
 
     .section-card {
@@ -1379,8 +1452,57 @@ a {
         font-size: 5rem;
     }
 
-    .custom-chart-card { padding: 16px; }
-    .radial-svg, .radar-svg { max-width: 320px; }
+    .custom-chart-card { padding: 14px; }
+    .radial-svg, .radar-svg { max-width: 280px; }
+
+    /* 移动端表格横向滚动 */
+    .report-content.markdown-body table {
+        font-size: 0.85rem;
+        display: block;
+        overflow-x: auto;
+    }
+
+    .report-content.markdown-body thead th,
+    .report-content.markdown-body tbody td {
+        padding: 10px 12px;
+        white-space: nowrap;
+    }
+
+    /* 最佳关系模式：移动端单列 */
+    .relmode-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .relmode-card {
+        padding: 14px 16px;
+    }
+
+    .relmode-icon {
+        font-size: 1.4rem;
+    }
+
+    .relmode-desc {
+        font-size: 0.85rem;
+    }
+
+    /* mermaid 图表移动端优化 */
+    .report-content.markdown-body .mermaid {
+        padding: 12px;
+        margin: 1.2em 0;
+    }
+
+    /* 代码块移动端优化 */
+    .report-content.markdown-body pre {
+        padding: 14px;
+        font-size: 0.82rem;
+    }
+
+    /* 引用块移动端优化 */
+    .report-content.markdown-body blockquote {
+        padding: 14px 16px;
+        margin: 1.2em 0;
+    }
 }
 
 /* ==================== 独立分享模式（隐藏首页导航） ==================== */
