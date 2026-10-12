@@ -128,7 +128,10 @@
     function renderQuestion(question) {
         questionCounter++;
         const questionId = question.id;
-        const questionType = question.question_type;
+        let questionType = question.question_type;
+        // 兼容中英文类型值
+        const typeMap = { '单选': 'single_choice', '多选': 'multiple_choice', '多选题': 'multiple_choice', '填空': 'text', '文本题': 'text' };
+        if (typeMap[questionType]) questionType = typeMap[questionType];
         const isRequired = question.is_required;
         const requiredMark = isRequired ? '<span class="required-mark">*</span>' : '';
 

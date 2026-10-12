@@ -392,11 +392,24 @@ function parseSection(page) {
  */
 function parseQuestion(page) {
   const props = page.properties || {};
+  const rawType = getPropertyValue(props, PROP.QUESTION_TYPE) || '';
+  // 兼容中英文题目类型：Notion 中可能是中文"单选"/"多选"/"填空"
+  const TYPE_MAP = {
+    '单选': 'single_choice',
+    '多选题': 'multiple_choice',
+    '多选': 'multiple_choice',
+    '填空': 'text',
+    '文本题': 'text',
+    'single_choice': 'single_choice',
+    'multiple_choice': 'multiple_choice',
+    'text': 'text',
+  };
+  const questionType = TYPE_MAP[rawType] || 'single_choice';
   return {
     id: page.id,
     type: 'question',
     text: getPropertyValue(props, PROP.QUESTION_TEXT) || '',
-    question_type: getPropertyValue(props, PROP.QUESTION_TYPE) || 'single_choice',
+    question_type: questionType,
     sort_order: getPropertyValue(props, PROP.QUESTION_SORT) ?? 0,
     is_required: getPropertyValue(props, PROP.QUESTION_REQUIRED) ?? true,
     options: [],
