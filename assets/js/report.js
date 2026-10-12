@@ -447,12 +447,13 @@
             const pieCharts = [];
             const mermaidCharts = [];
 
+            const radarCodeBlocks = [];
             allCodeBlocks.forEach((codeBlock) => {
                 const lang = (codeBlock.className || '').replace('language-', '').trim();
                 const text = codeBlock.textContent.trim();
                 const type = lang === 'mermaid' ? detectChartType(text) || 'mermaid' : detectChartType(text);
                 if (type === 'pie') pieCharts.push({ codeBlock, text });
-                else if (type === 'radar') return; // 雷达图统一从表格取数，忽略代码块
+                else if (type === 'radar') radarCodeBlocks.push({ codeBlock, text }); // 暂存，稍后根据是否有表格决定处理方式
                 else if (type === 'mermaid') mermaidCharts.push({ codeBlock, text });
             });
 
@@ -467,7 +468,7 @@
                 pre.parentElement.replaceChild(container, pre);
             }
 
-            // ---- 雷达图：从表格提取数据，找到雷达图章节插入 ----
+            // ---- 雷达图：优先从表格提取数据渲染自定义SVG；无表格则用mermaid渲染 ----
             const radarData = extractRadarDataFromTable();
             if (radarData) {
                 const radarHeading = findRadarSection();
@@ -505,6 +506,16 @@
 
                     // 在标题后插入新雷达图
                     radarHeading.after(radarContainer);
+                }
+            } else if (radarCodeBlocks.length > 0) {
+                // 无表格数据：将雷达图交由 mermaid 渲染
+                for (const { codeBlock, text } of radarCodeBlocks) {
+                    const pre = codeBlock.parentElement;
+                    if (!pre || !pre.parentElement) continue;
+                    const div = document.createElement('div');
+                    div.className = 'mermaid';
+                    div.textContent = text;
+                    pre.parentElement.replaceChild(div, pre);
                 }
             }
 
