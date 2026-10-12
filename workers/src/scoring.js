@@ -928,6 +928,7 @@ const FUNC_DESCS = {
   Fi: '忠于内心价值观，共情深刻，追求真实',
 };
 
+// 16种荣格八维历史人格类型定义
 const HISTORY_TYPES = [
   {
     name: '秦始皇', mbti: 'ENTJ', image: 'qinshihuang',
